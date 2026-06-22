@@ -1,0 +1,21 @@
+py -m venv venv\
+venv\Scripts\activate
+deactivate
+
+pip install pipreqs; pipreqs . --force
+z
+chromadb==1.5.9
+python-dotenv==1.2.2
+sentence-transformers==3.4.1
+transformers>=4.40.0
+torch>=2.0.0
+
+
+https://ollama.com/download
+
+where.exe /R "C:\Users" ollama.exe
+$env:PATH += ";C:\Users\ashkriz\AppData\Local\Programs\Ollama"
+ollama --version
+ollama pull llama3.2:3b
+ollama list
+

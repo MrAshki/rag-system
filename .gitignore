@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# Environment / local config
+.env
+.claude/
+
+# Large downloaded model & package files (fetch separately, see README)
+models/
+wheels/
+
+# Vector store data (regenerated at runtime from docs/)
+chroma_persistent_storage/
+
+# User-uploaded documents (runtime data, not source)
+docs/*
+!docs/.gitkeep
+
+# Book source materials (copyrighted, not for distribution)
+books/
+converted/

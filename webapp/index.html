@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>دستیار اسناد (تست)</title>
+<style>
+  body {
+    font-family: Tahoma, Arial, sans-serif;
+    background: #f4f5f7;
+    max-width: 700px;
+    margin: 40px auto;
+    padding: 0 16px;
+    color: #222;
+  }
+  h1 { font-size: 20px; }
+  .box {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+  }
+  input[type="file"] { margin-bottom: 8px; }
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 70px;
+    font-size: 15px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
+  button {
+    background: #2d6cdf;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 18px;
+    font-size: 14px;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  button:disabled { background: #aaa; cursor: not-allowed; }
+  #status, #answer {
+    margin-top: 12px;
+    white-space: pre-wrap;
+    line-height: 1.8;
+  }
+  #status { color: #555; font-size: 13px; }
+  #answer { font-size: 15px; }
+  #sources {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #444;
+    background: #f7f7f9;
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  .scope-row { margin-bottom: 10px; font-size: 14px; }
+  .scope-row label { margin-left: 16px; cursor: pointer; }
+  select#docSelect {
+    margin-right: 8px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+  }
+</style>
+</head>
+<body>
+
+<h1>دستیار پرسش‌وپاسخ روی اسناد (نسخه‌ی تستی)</h1>
+
+<div class="box">
+  <strong>۱. بارگذاری فایل (.txt، .pdf، .docx)</strong><br><br>
+  <input type="file" id="fileInput" accept=".txt,.pdf,.docx">
+  <button onclick="uploadFile()">بارگذاری</button>
+  <div id="status"></div>
+</div>
+
+<div class="box">
+  <strong>۲. پرسیدن سؤال</strong><br><br>
+
+  <div class="scope-row">
+    <label><input type="radio" name="scope" value="all" checked> همه اسناد</label>
+    <label><input type="radio" name="scope" value="selected"> فقط سند انتخاب‌شده</label>
+    <select id="docSelect" disabled></select>
+  </div>
+
+  <textarea id="question" placeholder="سؤال خود را بنویسید..."></textarea>
+  <br>
+  <button onclick="askQuestion()" id="askBtn">پرسیدن</button>
+  <div id="answer"></div>
+  <div id="sources"></div>
+</div>
+
+<script>
+const docSelect = document.getElementById('docSelect');
+
+function getScope() {
+  return document.querySelector('input[name="scope"]:checked').value;
+}
+
+document.querySelectorAll('input[name="scope"]').forEach(r => {
+  r.addEventListener('change', () => {
+    docSelect.disabled = getScope() !== 'selected';
+  });
+});
+
+async function refreshDocuments(selectDocumentId) {
+  try {
+    const res = await fetch('/api/documents');
+    const data = await res.json();
+    docSelect.innerHTML = '';
+    (data.documents || []).forEach(doc => {
+      const opt = document.createElement('option');
+      opt.value = doc.document_id;
+      opt.textContent = doc.source;
+      docSelect.appendChild(opt);
+    });
+    if (selectDocumentId) docSelect.value = selectDocumentId;
+  } catch (e) {
+    // ignore, list will just stay empty
+  }
+}
+
+async function uploadFile() {
+  const input = document.getElementById('fileInput');
+  const status = document.getElementById('status');
+  if (!input.files.length) {
+    status.textContent = 'یک فایل انتخاب کنید.';
+    return;
+  }
+  const formData = new FormData();
+  formData.append('file', input.files[0]);
+  status.textContent = 'در حال بارگذاری و پردازش...';
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (res.ok) {
+      status.textContent = `فایل «${data.filename}» با ${data.chunks} بخش با موفقیت اضافه شد.`;
+      await refreshDocuments(data.document_id);
+    } else {
+      status.textContent = 'خطا: ' + data.error;
+    }
+  } catch (e) {
+    status.textContent = 'خطا در ارتباط با سرور.';
+  }
+}
+
+async function askQuestion() {
+  const question = document.getElementById('question').value.trim();
+  const answerBox = document.getElementById('answer');
+  const sourcesBox = document.getElementById('sources');
+  const askBtn = document.getElementById('askBtn');
+  const scope = getScope();
+  const documentId = docSelect.value;
+  const documentName = docSelect.selectedOptions[0] ? docSelect.selectedOptions[0].textContent : null;
+
+  if (!question) return;
+  if (scope === 'selected' && !documentId) {
+    answerBox.textContent = 'ابتدا یک سند را انتخاب کنید.';
+    return;
+  }
+
+  askBtn.disabled = true;
+  answerBox.textContent = 'در حال فکر کردن...';
+  sourcesBox.textContent = '';
+  try {
+    const res = await fetch('/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, scope, document_id: documentId, document_name: documentName })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      answerBox.textContent = data.answer;
+      if (data.sources && data.sources.length) {
+        sourcesBox.textContent = 'منابع:\n' + data.sources.map(s => '- ' + s).join('\n');
+      }
+    } else {
+      answerBox.textContent = 'خطا: ' + data.error;
+    }
+  } catch (e) {
+    answerBox.textContent = 'خطا در ارتباط با سرور.';
+  } finally {
+    askBtn.disabled = false;
+  }
+}
+
+refreshDocuments();
+</script>
+
+</body>
+</html>
