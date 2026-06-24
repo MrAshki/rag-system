@@ -9,11 +9,28 @@ import ollama
 import sys
 from typing import List, Dict, Optional
 
+import chunker
+
 sys.stdout.reconfigure(encoding="utf-8")
 load_dotenv()
 
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
+def _require_env(name: str) -> str:
+    """Fail fast instead of silently falling back to a different model.
+    A silent default here previously meant Chroma's default all-MiniLM-L6-v2
+    or Ollama's llama3.2 could get used by accident if .env was misconfigured
+    -- for embeddings that would silently corrupt the index (queries embedded
+    with one model against vectors built with another)."""
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(
+            f"{name} is not set. Add it to .env before running "
+            f"(expected EMBEDDING_MODEL=./models/bge-m3 and OLLAMA_MODEL=gemma3:12b)."
+        )
+    return value
+
+
+EMBEDDING_MODEL = _require_env("EMBEDDING_MODEL")
+OLLAMA_MODEL = _require_env("OLLAMA_MODEL")
 COLLECTION_NAME = "document_qa_collection_local"
 
 if torch.cuda.is_available():
@@ -36,22 +53,6 @@ except Exception as e:
     sys.exit(1)
 
 
-def load_documents_from_directory(directory_path: str) -> List[Dict[str, str]]:
-    if not os.path.exists(directory_path):
-        print(f"Error: Directory {directory_path} does not exist")
-        return []
-
-    documents = []
-    for filename in os.listdir(directory_path):
-        if filename.endswith(".txt"):
-            try:
-                with open(os.path.join(directory_path, filename), "r", encoding="utf-8") as file:
-                    documents.append({"id": filename, "text": file.read()})
-            except Exception as e:
-                print(f"Error reading {filename}: {str(e)}")
-    return documents
-
-
 def split_text(text: str, chunk_size: int = 800, chunk_overlap: int = 150) -> List[str]:
     if not text:
         return []
@@ -65,26 +66,74 @@ def split_text(text: str, chunk_size: int = 800, chunk_overlap: int = 150) -> Li
     return chunks
 
 
-def index_document(filename: str, text: str, document_id: Optional[str] = None) -> Dict:
-    """Chunk a document and upsert it under a stable document_id, so two documents that
-    happen to share a filename never collide or get mixed in the vector store."""
+def index_document(filename: str, text: str, document_id: Optional[str] = None, user_id: int = None) -> Dict:
+    """Chunk a document and upsert it under a stable document_id, tagged with the
+    owning user_id, so two documents that happen to share a filename never collide,
+    and so one user's documents are never visible to another user."""
     document_id = document_id or uuid.uuid4().hex
     chunks = split_text(text)
-    print(f"Indexing '{filename}' ({len(chunks)} chunks) on {EMBEDDING_DEVICE}...", flush=True)
+    print(f"Indexing '{filename}' ({len(chunks)} chunks) on {EMBEDDING_DEVICE} for user_id={user_id}...", flush=True)
     for i, chunk in enumerate(chunks):
         collection.upsert(
             ids=[f"{document_id}_chunk{i+1}"],
             documents=[chunk],
-            metadatas=[{"document_id": document_id, "source": filename, "chunk": i + 1}],
+            metadatas=[{
+                "document_id": document_id,
+                "source": filename,
+                "chunk": i + 1,
+                "user_id": user_id,
+            }],
         )
         if (i + 1) % 50 == 0 or (i + 1) == len(chunks):
             print(f"  {filename}: {i+1}/{len(chunks)} chunks indexed", flush=True)
     return {"document_id": document_id, "chunks": len(chunks)}
 
 
-def list_documents() -> List[Dict]:
-    """Return the distinct indexed documents as {document_id, source} for UI display."""
-    data = collection.get(include=["metadatas"])
+def index_chunks(
+    filename: str,
+    chunks: List[Dict],
+    document_id: Optional[str] = None,
+    user_id: int = None,
+    source_file_type: str = None,
+    normalized_md_path: str = None,
+) -> Dict:
+    """Index pre-built structure-aware chunks (from chunker.parse_markdown_to_chunks)
+    under a stable document_id. Each chunk's stored/embedded text gets the short
+    contextual header (chapter/section/page) prepended via chunker.build_embedded_text,
+    and the same fields are kept as queryable metadata."""
+    document_id = document_id or uuid.uuid4().hex
+    print(f"Indexing '{filename}' ({len(chunks)} structured chunks) on {EMBEDDING_DEVICE} for user_id={user_id}...", flush=True)
+    for i, ch in enumerate(chunks):
+        metadata = {
+            "document_id": document_id,
+            "source": filename,
+            "chunk": ch["chunk_index"],
+            "user_id": user_id,
+            "source_file_type": source_file_type,
+            "normalized_md_path": normalized_md_path,
+            "chapter": ch.get("chapter"),
+            "section": ch.get("section"),
+            "subsection": ch.get("subsection"),
+            "page": ch.get("page"),
+            "char_start": ch.get("char_start"),
+            "char_end": ch.get("char_end"),
+        }
+        metadata = {k: v for k, v in metadata.items() if v is not None}
+        collection.upsert(
+            ids=[f"{document_id}_chunk{ch['chunk_index']}"],
+            documents=[chunker.build_embedded_text(ch)],
+            metadatas=[metadata],
+        )
+        if (i + 1) % 50 == 0 or (i + 1) == len(chunks):
+            print(f"  {filename}: {i+1}/{len(chunks)} chunks indexed", flush=True)
+    return {"document_id": document_id, "chunks": len(chunks)}
+
+
+def list_documents(user_id: int = None) -> List[Dict]:
+    """Return the distinct indexed documents as {document_id, source} for UI display.
+    Scoped to a single user's documents unless user_id is None (admin/internal use)."""
+    where = {"user_id": user_id} if user_id is not None else None
+    data = collection.get(where=where, include=["metadatas"])
     seen = {}
     for m in data["metadatas"]:
         if m and m.get("document_id") and m["document_id"] not in seen:
@@ -102,9 +151,21 @@ def split_questions(text: str) -> List[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
-def query_documents(question: str, n_results: int = 5, document_id: str = None) -> List[Dict]:
+def query_documents(question: str, n_results: int = 5, document_id: str = None, user_id: int = None) -> List[Dict]:
     try:
-        where = {"document_id": document_id} if document_id else None
+        conditions = []
+        if user_id is not None:
+            conditions.append({"user_id": user_id})
+        if document_id:
+            conditions.append({"document_id": document_id})
+
+        if len(conditions) == 0:
+            where = None
+        elif len(conditions) == 1:
+            where = conditions[0]
+        else:
+            where = {"$and": conditions}
+
         results = collection.query(
             query_texts=[question],
             n_results=n_results,
@@ -115,15 +176,35 @@ def query_documents(question: str, n_results: int = 5, document_id: str = None) 
         docs = results["documents"][0] if results["documents"] else []
         metas = results["metadatas"][0] if results["metadatas"] else []
         for doc, meta in zip(docs, metas):
+            meta = meta or {}
             chunks.append({
                 "text": doc,
-                "source": (meta or {}).get("source", "نامشخص"),
-                "chunk": (meta or {}).get("chunk", "?"),
+                "source": meta.get("source", "نامشخص"),
+                "chunk": meta.get("chunk", "?"),
+                "chapter": meta.get("chapter"),
+                "section": meta.get("section"),
+                "subsection": meta.get("subsection"),
+                "page": meta.get("page"),
             })
         return chunks
     except Exception as e:
         print(f"Error querying documents: {str(e)}")
         return []
+
+
+def _citation_label(chunk: Dict) -> str:
+    """Builds a citation string: filename — chapter — section — p.N — chunk N,
+    falling back to the old 'filename — chunk N' format when no chapter/
+    section/page metadata is available (e.g. for chunks indexed before Step 2)."""
+    parts = [chunk["source"]]
+    if chunk.get("chapter"):
+        parts.append(chunk["chapter"])
+    if chunk.get("section"):
+        parts.append(chunk["section"])
+    if chunk.get("page"):
+        parts.append(f"p.{chunk['page']}")
+    parts.append(f"chunk {chunk['chunk']}")
+    return " — ".join(parts)
 
 
 def generate_response(
@@ -143,7 +224,7 @@ def generate_response(
 
     try:
         context = "\n\n".join(
-            f"[منبع: {c['source']} - بخش {c['chunk']}]\n{c['text']}" for c in relevant_chunks
+            f"[منبع: {_citation_label(c)}]\n{c['text']}" for c in relevant_chunks
         )
 
         scope_instruction = (
@@ -185,28 +266,8 @@ def generate_response(
         if answer == no_info_message:
             sources = []
         else:
-            sources = [f"{c['source']} — chunk {c['chunk']}" for c in relevant_chunks]
+            sources = [_citation_label(c) for c in relevant_chunks]
         return {"answer": answer, "sources": sources}
     except Exception as e:
         print(f"Error generating response: {str(e)}")
         return {"answer": "Error generating response.", "sources": []}
-
-
-def main():
-    documents = load_documents_from_directory("./docs")
-    if not documents:
-        return
-
-    for doc in documents:
-        index_document(doc["id"], doc["text"])
-
-    question = "what age range does it affect with cosmeticorexia?"
-    relevant_chunks = query_documents(question)
-    if relevant_chunks:
-        result = generate_response(question, relevant_chunks)
-        print("\nAnswer:", result["answer"])
-        print("Sources:", ", ".join(result["sources"]))
-
-
-if __name__ == "__main__":
-    main()

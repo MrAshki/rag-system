@@ -14,6 +14,15 @@ wheels/
 # Vector store data (regenerated at runtime from docs/)
 chroma_persistent_storage/
 
+# Local maintenance backups of the vector store (large, machine-specific)
+backups/
+
+# Legacy SQLite database (migrated to PostgreSQL) — never commit
+app_data.sqlite3
+
+# Runtime server logs
+*.log
+
 # User-uploaded documents (runtime data, not source)
 docs/*
 !docs/.gitkeep

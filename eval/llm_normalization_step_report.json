@@ -1,0 +1,122 @@
+{
+  "step": "Step 2.5: optional LLM-assisted structure relabeling layer",
+  "rules_followed": {
+    "chroma_touched": false,
+    "chroma_reindexed_or_migrated": false,
+    "full_eval_run_eval_py_executed": false,
+    "anything_downloaded_or_installed": false,
+    "ocr_implemented": false,
+    "llm_used_to_rewrite_add_delete_translate_text": false,
+    "chroma_collection_access_made_at_all": false
+  },
+  "files_added": [
+    "llm_normalize.py",
+    "eval/llm_normalization_step_report.json",
+    "eval/llm_normalization_step_report.txt"
+  ],
+  "files_changed": [
+    "ingest.py (exposes tokenizer blocks pre-render; wires optional LLM relabeling step; new metadata fields; new force_llm_normalization parameter on normalize_txt/normalize_docx/normalize_pdf/normalize_document)",
+    ".env.example (new ENABLE_LLM_NORMALIZATION, LLM_NORMALIZATION_MODEL, LLM_NORMALIZATION_NUM_CTX, LLM_NORMALIZATION_MAX_BATCHES, and the previously-undocumented ENABLE_OCR_FALLBACK)"
+  ],
+  "files_not_changed": [
+    "app.py -- no changes needed; normalize_document()'s new parameter defaults to False and the new env flags default to off, so existing behavior is 100% unchanged",
+    "chunker.py, rag.py -- no changes",
+    "Chroma / converted/*.md for the 3 currently-indexed documents -- untouched"
+  ],
+  "default_config": {
+    "ENABLE_LLM_NORMALIZATION": "false (off by default, as required)",
+    "LLM_NORMALIZATION_MODEL": "gemma3:12b",
+    "LLM_NORMALIZATION_NUM_CTX": 4096,
+    "LLM_NORMALIZATION_MAX_BATCHES": 20
+  },
+  "design_summary": {
+    "pipeline": "deterministic tokenize -> explode blocks into classifiable units -> optional LLM relabeling (batched) -> reassemble blocks using ORIGINAL text + new labels -> render Markdown -> validate -> save",
+    "safety_property": "The LLM is given only numbered text previews and returns ONLY {index, label} pairs -- it never outputs document text. Our code always splices the original, untouched block text back in. This makes content mutation structurally impossible (not just detected after the fact); validation is mostly schema-level (JSON parses, one label per index, no duplicates/out-of-range, label in allowed enum) rather than fuzzy text-diffing.",
+    "batching": "Units packed greedily into batches sized to fit num_ctx (~4 chars/token estimate, 900-token reserved overhead, max 18 units/batch). Batches run sequentially, carrying a 'heading stack' (last seen heading_1/2/3 titles) forward as context for the next batch.",
+    "fallback_granularity": "Per-batch: if one batch's response is malformed/incomplete, only that batch's units revert to their deterministic labels -- not the whole document.",
+    "trigger_rule": "Runs only if ENABLE_LLM_NORMALIZATION=true AND (force_llm_normalization=true OR structure_confidence is low/medium). Never runs automatically on structure_confidence=high documents. Skips (does not run) if the estimated batch count exceeds LLM_NORMALIZATION_MAX_BATCHES, unless force=true."
+  },
+  "targeted_test_results": {
+    "mocked_validator_and_fallback_tests": {
+      "total": 10,
+      "passed": 10,
+      "cases": [
+        "well-formed JSON response parses correctly",
+        "malformed/truncated JSON correctly rejected",
+        "JSON found via brace-scan even if model adds text around it",
+        "missing index correctly rejected",
+        "duplicate index correctly rejected",
+        "out-of-range index correctly rejected",
+        "label outside allowed enum correctly rejected",
+        "classify_document: Ollama call exception -> full batch falls back, original text preserved",
+        "classify_document: malformed JSON -> batch falls back, status='failed', warning recorded",
+        "classify_document: valid response -> labels applied correctly, original text untouched"
+      ]
+    },
+    "real_llm_test_questline_docx": {
+      "model": "gemma3:12b",
+      "num_ctx": 4096,
+      "mode": "force_llm_normalization=True, ENABLE_LLM_NORMALIZATION=true (test-only env override)",
+      "elapsed_seconds": 134.2,
+      "units_classified": 145,
+      "batches_total": 9,
+      "batches_fallback_count": 0,
+      "llm_validation_status": "passed",
+      "normalization_mode": "llm_assisted",
+      "heading_count_before": 29,
+      "heading_count_after": 21,
+      "content_preservation_check": {
+        "word_count_before": 2366,
+        "word_count_after": 2366,
+        "word_multiset_identical": true,
+        "word_sequence_identical_order_preserved": true,
+        "char_count_content_only_before": 11056,
+        "char_count_content_only_after": 11056,
+        "verdict": "PERFECT -- zero words added, removed, or reordered; only structural labels changed"
+      },
+      "targeted_issue_checks": {
+        "flow_line_should_not_become_heading": {"result": "FIXED -- 'اقدام واقعی → تایید → بازخورد فوری...' is now plain paragraph text, not a heading", "pass": true},
+        "qr_gps_checkin_should_stay_list_items": {"result": "FIXED -- 'QR check-in' / 'GPS check-in' are now bullets, not headings", "pass": true},
+        "persian_numbered_sections_remain_headings": {"result": "PARTIAL -- all 15 numbered sections remained headings (none demoted to plain text), but sections 4 and 5 were inconsistently leveled as heading_3 instead of heading_2 like their siblings 1-3/6-15", "pass": "partial"},
+        "real_bullets_remain_bullets": {"result": "MOSTLY -- most explicit bullets preserved correctly, but 2 items in the closing list ('اعتماد در marketplace', 'هویت دیجیتال ورزشی') were wrongly promoted to heading_2, and 1 item ('و ارزش واقعی در مارکت') was demoted to a bare paragraph (lost its bullet marker, though its TEXT is fully intact)", "pass": "partial"}
+      },
+      "new_issues_observed_not_present_in_deterministic_output": [
+        "The document's subtitle line (correctly a plain paragraph in the deterministic pass) was wrongly promoted to a second level-1 '#' title heading.",
+        "The 7 structurally-identical mini-framework labels (Cue/Action/Proof/Feedback/Identity/Value/Next Path) were classified inconsistently: 4 as bullets, 2 as heading_2, 1 as plain paragraph -- same semantic role, three different treatments.",
+        "Heading level drift across batch boundaries: sections 4/5 landed at heading_3 instead of heading_2, despite the heading-stack context-carrying mechanism."
+      ]
+    },
+    "utf8_integrity_check": {
+      "roundtrip_identical": true,
+      "has_half_space_nim_fasele": true,
+      "has_persian_digits": true,
+      "has_guillemets": true,
+      "has_mojibake_replacement_char": false,
+      "pass": true
+    }
+  },
+  "honest_assessment": "The safety design is fully validated: across 145 classified units and 9 real LLM batches, content preservation was perfect (identical word multiset, order, and char count) -- the label-only architecture worked exactly as designed, with zero content mutation even though the model's labeling was imperfect. On label QUALITY specifically: the two originally-reported issues (flow-line-as-heading, list-intro-as-bullet for QR/GPS check-in) are reliably fixed. However, the LLM pass also introduced new structural inconsistencies not present in the deterministic-only output (duplicate title heading, heading-level drift between batches, inconsistent treatment of repeated framework labels). Net structural quality is a mixed improvement, not a clean win, on this one real document. This matches the predicted risk in the Step 2.5 plan ('a wrong label is still possible; this is a quality risk, not a corruption risk') and is exactly why ENABLE_LLM_NORMALIZATION defaults to off and this is being reported for your review rather than enabled automatically.",
+  "metadata_fields_added": [
+    "llm_normalization_used (bool)",
+    "llm_model (string|null)",
+    "llm_validation_status (not_attempted|skipped_too_many_batches|passed|partial|failed)",
+    "llm_validation_warnings (list of strings, per-batch fallback reasons)",
+    "normalization_mode (deterministic|llm_assisted|fallback)",
+    "llm_batches_total (int)",
+    "llm_batches_fallback_count (int)"
+  ],
+  "fallback_warnings_from_real_test": [],
+  "git_status": {
+    "modified_tracked": [".env.example", ".gitignore", "app.py", "rag.py", "webapp/index.html"],
+    "note": "app.py/rag.py/webapp/index.html carry over unstaged from earlier Step 2 work, not touched this session",
+    "new_untracked": ["llm_normalize.py", "eval/llm_normalization_step_report.json", "eval/llm_normalization_step_report.txt"],
+    "chroma_or_docs_or_converted_changes": "none from this step (converted/48480f24643b40fbb0b04f4a5f2e9634.llm_assisted_sample.md was added as a read-only inspection artifact only, both docs/ and converted/ are gitignored entirely)"
+  },
+  "confirmations": {
+    "chroma_not_touched": true,
+    "no_full_eval_run": true,
+    "no_ocr_download_or_install": true,
+    "no_chroma_collection_access_at_all": true
+  },
+  "next_step_proposal_ocr_not_implemented_yet": "Once this LLM-assisted normalization layer is reviewed and considered stable, propose OCR as its own separate phase: (1) scanned-PDF detection is already implemented (ocr_required / low_text_density_possible_scanned_pdf thresholds from Step 2), (2) local OCR tool inspection was already done in Step 2 -- nothing found (no tesseract/pytesseract/pdf2image/ocrmypdf/poppler anywhere on this system), (3) a concrete lightest Windows-friendly setup (~100-150MB: Tesseract-OCR + pytesseract + pdf2image + Poppler) will only be proposed for explicit approval at that time -- nothing will be installed without asking first."
+}

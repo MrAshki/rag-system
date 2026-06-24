@@ -1,0 +1,225 @@
+BASELINE RAG BENCHMARK REPORT
+items total: 19  positive: 17  true_negative: 2
+embedding_model: ./models/bge-m3  ollama_model: gemma3:12b  n_results_fetched: 10
+elapsed_seconds: 434.6
+
+AGGREGATE METRICS (positive items only, approximate via keyword matching)
+Recall@5:  76.5%
+Recall@10: 88.2%
+MRR:       0.625
+False refusals (right info retrieved, model still refused): 1 / 17
+
+TRUE-NEGATIVE CONTROL ITEMS
+Correctly refused: 2 / 2
+Hallucinated an answer instead of refusing: 0 / 2
+
+LLM-JUDGE METRICS (positive items, gemma3-graded; treat as indicative, not ground truth)
+correct: 1  partial: 15  incorrect: 1  unparsed/error: 0
+faithful=yes: 16  faithful=no: 1
+
+PER-ITEM DETAIL
+----------------------------------------------------------------------
+id: turtles_all_the_way_down  category: conceptual  true_negative: False
+question_fa: منظور نویسنده از عبارت «لاک‌پشت‌ها تا آخر روی هم سوار شده‌اند» (turtles all the way down) در فصل اول چیست؟
+expected_filename: determaind.txt  expected_section: Chapter 1: Turtles All the Way Down
+retrieved_sources(top10): ['نامشخص', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'نامشخص', 'نامشخص', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'نامشخص']
+keyword_hit_ranks: [2, 3, 4, 8, 9]  first_hit_rank: 2
+recall@5: 1  recall@10: 1  mrr_contrib: 0.500
+is_refusal: False  false_refusal: False
+llm_judge: correctness=partial  faithful=yes  reason=پاسخ تا حدی درست است، اما به طور کامل مفهوم نویسنده را درک نمی‌کند. تمرکز بر جنبه‌ی طنزآمیز و تحقیرآمیز است، در حالی که نویسنده بر زنجیره علت و معلول تاکید دارد.
+answer: نویسنده از این عبارت برای توصیف یک ادعای مطمئن که نه تنها پوچ است، بلکه در برابر هر چالشی نیز مصون است، استفاده می‌کند. این یک نسخه پیشرفته از مشاجرات تحقیرآمیز در مدرسه است. اگر پیرزن در برابر ویلیام جیمز ادعا می‌کرد که لاک‌پشت بعدی در هوا شناور است، این داستان دیگر خنده‌دار نبود.
+sources: ['نامشخص — chunk ?', 'determaind.txt — chunk 5', 'determaind.txt — chunk 6', 'determaind.txt — chunk 235', 'نامشخص — chunk ?']
+----------------------------------------------------------------------
+id: neuron_that_started_process  category: conceptual  true_negative: False
+question_fa: نویسنده برای رد کردن اختیار آزاد چه چالشی درباره پیدا کردن یک نورون مطرح می‌کند؟
+expected_filename: determaind.txt  expected_section: Chapter 1: Turtles All the Way Down -> Ground Rules and Definitions -> What Do I Mean by Free Will?
+retrieved_sources(top10): ['determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'نامشخص', 'نامشخص', 'determaind.txt', 'نامشخص', 'determaind.txt']
+keyword_hit_ranks: [2]  first_hit_rank: 2
+recall@5: 1  recall@10: 1  mrr_contrib: 0.500
+is_refusal: False  false_refusal: False
+llm_judge: correctness=partial  faithful=yes  reason=پاسخ تولید شده تا حدودی درست است، اما برخی از جزئیات (مانند اشاره به 'جلوگیری از یک عمل') در متن اصلی وجود ندارد. با این حال، ایده اصلی درک شده است.
+answer: نویسنده برای رد کردن اختیار آزاد، از مردم می‌خواهد یک نورونی را نشان دهند که بدون هیچ دلیلی یا بدون تأثیر هیچ رویداد بیولوژیکی قبلی، یک عمل را آغاز می‌کند. او همچنین از مردم می‌خواهد یک نورونی را نشان دهند که به طور مساوی در جلوگیری از یک عمل خودکفا بوده است. او استدلال می‌کند که نورون‌های اختیار آزاد یا "عدم اختیار" وجود ندارند.
+sources: ['determaind.txt — chunk 501', 'determaind.txt — chunk 46', 'determaind.txt — chunk 624', 'determaind.txt — chunk 105', 'determaind.txt — chunk 651']
+----------------------------------------------------------------------
+id: final_three_minutes_metaphor  category: conceptual  true_negative: False
+question_fa: استعاره «سه دقیقه پایانی یک فیلم» (the final three minutes of a movie) در فصل دوم به چه معناست؟
+expected_filename: determaind.txt  expected_section: Chapter 2: The Final Three Minutes of a Movie
+retrieved_sources(top10): ['determaind.txt', 'نامشخص', 'نامشخص', 'determaind.txt', 'determaind.txt', 'نامشخص', 'determaind.txt', 'determaind.txt', 'نامشخص', 'determaind.txt']
+keyword_hit_ranks: [1, 4, 5]  first_hit_rank: 1
+recall@5: 1  recall@10: 1  mrr_contrib: 1.000
+is_refusal: False  false_refusal: False
+llm_judge: correctness=partial  faithful=yes  reason=پاسخ به درستی مفهوم کلی استعاره را بیان می‌کند، اما جزئیات دقیق‌تری از توضیح نویسنده را در بر ندارد.
+answer: استعاره «سه دقیقه پایانی یک فیلم» به این معنی است که عدم در نظر گرفتن دیدگاه بزرگتر در مورد یک موضوع، مانند تماشای فقط سه دقیقه پایانی یک فیلم، می‌تواند فریبنده باشد. این استعاره نشان می‌دهد که درک ویژگی‌ها و پیامدهای قصد بدون پرسیدن اینکه قصد از کجا آمده است، بی‌فایده است. این دیدگاه محدود می‌تواند بی‌رحمانه و غیراخلاقی باشد.
+sources: ['determaind.txt — chunk 54', 'نامشخص — chunk ?', 'نامشخص — chunk ?', 'determaind.txt — chunk 59', 'determaind.txt — chunk 58']
+----------------------------------------------------------------------
+id: free_wont_veto  category: conceptual  true_negative: False
+question_fa: منظور از «اراده‌ی نه‌گفتن» (Free Won't) و قدرت وتو در کتاب چیست؟
+expected_filename: determaind.txt  expected_section: Chapter 2: The Final Three Minutes of a Movie -> Free Won't: The Power to Veto
+retrieved_sources(top10): ['نامشخص', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'نامشخص', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt']
+keyword_hit_ranks: [7]  first_hit_rank: 7
+recall@5: 0  recall@10: 1  mrr_contrib: 0.143
+is_refusal: True  false_refusal: True
+llm_judge: correctness=incorrect  faithful=no  reason=پاسخ به سوال پاسخ نداد. اطلاعات کافی در سند وجود دارد.
+answer: اطلاعات کافی در اسناد موجود برای پاسخ به این سؤال وجود ندارد.
+sources: []
+----------------------------------------------------------------------
+id: intent_seconds_minutes  category: conceptual  true_negative: False
+question_fa: طبق فصل سوم، نیت ما در عرض ثانیه‌ها تا دقیقه‌ها پیش از یک تصمیم چگونه شکل می‌گیرد؟
+expected_filename: determaind.txt  expected_section: Chapter 3: Where Does Intent Come From? -> Seconds to Minutes Before
+retrieved_sources(top10): ['determaind.txt', 'determaind.txt', 'نامشخص', 'determaind.txt', 'نامشخص', 'determaind.txt', 'نامشخص', 'determaind.txt', 'determaind.txt', 'determaind.txt']
+keyword_hit_ranks: [1, 2, 4]  first_hit_rank: 1
+recall@5: 1  recall@10: 1  mrr_contrib: 1.000
+is_refusal: False  false_refusal: False
+llm_judge: correctness=partial  faithful=yes  reason=پاسخ تولید شده اطلاعات اضافی را ارائه می دهد که در متن وجود ندارد، اما در کل با مفهوم اصلی مطابقت دارد.
+answer: طبق فصل سوم، نیت ما در عرض ثانیه‌ها تا دقیقه‌ها پیش از یک تصمیم با اطلاعات حسی که به مغز ما وارد می‌شود (از جمله اطلاعاتی که ما از آن آگاه نیستیم) شکل می‌گیرد. این اطلاعات حسی می‌تواند واضح باشد، مانند شنیدن یک دستور و دیدن یک تفنگ، یا ظریف‌تر، مانند تصمیم‌گیری در مورد اینکه یک شیء در تصویر یک تلفن همراه یا یک اسلحه است. تصمیم ما در آن لحظه می‌تواند تحت تأثیر عواملی مانند جنسیت، نژاد، سن و حالت چهره فرد تصویر شده قرار گیرد.
+sources: ['determaind.txt — chunk 134', 'determaind.txt — chunk 133', 'نامشخص — chunk ?', 'determaind.txt — chunk 131', 'نامشخص — chunk ?']
+----------------------------------------------------------------------
+id: intent_hormones_days  category: conceptual  true_negative: False
+question_fa: هورمون‌ها در عرض دقیقه‌ها تا روزها چگونه روی نیت و تصمیم‌گیری اثر می‌گذارند؟
+expected_filename: determaind.txt  expected_section: Chapter 3: Where Does Intent Come From? -> Minutes to Days Before
+retrieved_sources(top10): ['determaind.txt', 'determaind.txt', 'determaind.txt', 'نامشخص', 'نامشخص', 'determaind.txt', 'نامشخص', 'نامشخص', 'determaind.txt', 'determaind.txt']
+keyword_hit_ranks: [3, 6, 10]  first_hit_rank: 3
+recall@5: 1  recall@10: 1  mrr_contrib: 0.333
+is_refusal: False  false_refusal: False
+llm_judge: correctness=partial  faithful=yes  reason=پاسخ تولید شده برخی از نکات را بیان می‌کند اما جزئیات و مثال‌های موجود در پاسخ مرجع را پوشش نمی‌دهد.
+answer: هورمون‌ها با سرعت‌های مختلف ترشح شده و به روش‌های گوناگون بر مغز تأثیر می‌گذارند، همه این موارد بدون کنترل یا آگاهی ما اتفاق می‌افتد. این هورمون‌ها می‌توانند باعث آزاد شدن بسته‌های انتقال‌دهنده عصبی، باز یا بسته شدن کانال‌های یونی و تغییر تعداد گیرنده‌ها در مناطق خاصی از مغز شوند. این اثرات معمولاً خفیف هستند و فقط در افراد عادی رخ می‌دهند.
+sources: ['determaind.txt — chunk 164', 'determaind.txt — chunk 163', 'determaind.txt — chunk 149', 'نامشخص — chunk ?', 'نامشخص — chunk ?']
+----------------------------------------------------------------------
+id: intent_layers_full_chain  category: conceptual  true_negative: False
+question_fa: نویسنده چگونه نشان می‌دهد که نیت ما لایه به لایه از ثانیه‌ها تا ژن‌ها، فرهنگ و حتی تکامل شکل گرفته است؟
+expected_filename: determaind.txt  expected_section: Chapter 3: Where Does Intent Come From? (full chapter span)
+retrieved_sources(top10): ['determaind.txt', 'نامشخص', 'determaind.txt', 'determaind.txt', 'نامشخص', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'نامشخص', 'determaind.txt']
+keyword_hit_ranks: [1, 3, 4, 6, 7, 10]  first_hit_rank: 1
+recall@5: 1  recall@10: 1  mrr_contrib: 1.000
+is_refusal: False  false_refusal: False
+llm_judge: correctness=partial  faithful=yes  reason=پاسخ به طور کلی درست است اما جزئیات را به اندازه پاسخ مرجع بیان نمی‌کند.
+answer: نویسنده توضیح می‌دهد که نیت ما نتیجه تمام تعاملات بین زیست‌شناسی و محیط است که قبل از آن رخ داده است. این تعاملات شامل اتفاقاتی است که در ثانیه‌ها، ساعت‌ها، روزها، سال‌ها، دوران نوجوانی، کودکی، زندگی جنینی و حتی زمانی که اسپرم و تخمک برای تشکیل ژنوم ما با هم ترکیب شدند، رخ داده است. علاوه بر این، نویسنده به تأثیر فرهنگ نیاکان ما و تکامل گونه ما میلیون‌ها سال پیش اشاره می‌کند.
+sources: ['determaind.txt — chunk 132', 'نامشخص — chunk ?', 'determaind.txt — chunk 631', 'determaind.txt — chunk 226', 'نامشخص — chunk ?']
+----------------------------------------------------------------------
+id: chaos_vs_unpredictability  category: conceptual  true_negative: False
+question_fa: طبق فصل آشوب (A Primer on Chaos)، تفاوت بین آشوب (chaos) واقعی و صِرف غیرقابل‌پیش‌بینی بودن چیست؟
+expected_filename: determaind.txt  expected_section: Chapter 5: A Primer on Chaos
+retrieved_sources(top10): ['determaind.txt', 'نامشخص', 'نامشخص', 'determaind.txt', 'determaind.txt', 'نامشخص', 'نامشخص', 'determaind.txt', 'نامشخص', 'determaind.txt']
+keyword_hit_ranks: []  first_hit_rank: None
+recall@5: 0  recall@10: 0  mrr_contrib: 0.000
+is_refusal: False  false_refusal: False
+llm_judge: correctness=partial  faithful=yes  reason=پاسخ تا حدی درست است، اما به طور کامل تفاوت بین آشوب و غیرقابل پیش‌بینی بودن را توضیح نداده و به اراده آزاد اشاره کرده که در متن اصلی نیست.
+answer: طبق فصل آشوب، تفاوت این است که آشوبیسم (chaoticism) هنوز هم قطعی (deterministic) است، در حالی که غیرقابل‌پیش‌بینی بودن به شما می‌گوید چه اتفاقی خواهد افتاد. آشوبیسم به شما امکان می‌دهد توضیح دهید که چرا چیزی اتفاق افتاده است. این اشتباه در تفکیک این دو موضوع، افراد را به سمت باور به اراده آزاد سوق می‌دهد.
+sources: ['determaind.txt — chunk 403', 'نامشخص — chunk ?', 'نامشخص — chunk ?', 'determaind.txt — chunk 412', 'determaind.txt — chunk 503']
+----------------------------------------------------------------------
+id: quantum_randomness_vs_freedom  category: conceptual  true_negative: False
+question_fa: چرا نویسنده تصادفی بودن کوانتومی (quantum indeterminacy) را دلیل قانع‌کننده‌ای برای اختیار آزاد نمی‌داند؟
+expected_filename: determaind.txt  expected_section: Chapter 9: A Primer on Quantum Indeterminacy / Chapter 10: Is Your Free Will Random?
+retrieved_sources(top10): ['determaind.txt', 'determaind.txt', 'determaind.txt', 'نامشخص', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'نامشخص', 'determaind.txt']
+keyword_hit_ranks: [1, 2, 3, 7, 8, 10]  first_hit_rank: 1
+recall@5: 1  recall@10: 1  mrr_contrib: 1.000
+is_refusal: False  false_refusal: False
+llm_judge: correctness=partial  faithful=yes  reason=پاسخ تولید شده تا حدودی درست است، اما به طور کامل توضیح نویسنده را بیان نمی‌کند. نویسنده بیشتر بر این نکته تاکید دارد که تصادفی بودن کوانتومی به سطح مغز نمی‌رسد.
+answer: نویسنده استدلال می‌کند که تصادفی بودن کوانتومی به ما در حل مسئله اختیار آزاد کمک نمی‌کند، زیرا تصادفی بودن تصادفی بودن را در ساختار اساسی جهان معرفی می‌کند. جان سرل معتقد است که این تصادفی بودن با این فرضیه که برخی از اعمال ما آزادانه انجام می‌شوند، یکسان نیست. نویسنده همچنین اشاره می‌کند که اگر مکانیک کوانتومی در اختیار آزاد نقش داشت، هر فکر و عملی مستحق این ادعا بود که "نمی‌دانم چه چیزی به سراغم آمد."
+sources: ['determaind.txt — chunk 601', 'determaind.txt — chunk 605', 'determaind.txt — chunk 625', 'نامشخص — chunk ?', 'determaind.txt — chunk 399']
+----------------------------------------------------------------------
+id: emergent_complexity_vs_free_will  category: conceptual  true_negative: False
+question_fa: چرا پیچیدگی نوظهور (emergent complexity) نمی‌تواند پایه‌ای برای اختیار آزاد باشد؟
+expected_filename: determaind.txt  expected_section: Chapter 7: A Primer on Emergent Complexity / Chapter 8: Does Your Free Will Just Emerge?
+retrieved_sources(top10): ['determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'نامشخص', 'determaind.txt', 'determaind.txt']
+keyword_hit_ranks: [1, 2, 5, 7, 9]  first_hit_rank: 1
+recall@5: 1  recall@10: 1  mrr_contrib: 1.000
+is_refusal: False  false_refusal: False
+llm_judge: correctness=partial  faithful=yes  reason=پاسخ تولید شده برخی از نکات را از متن بازیابی شده بیان می‌کند، اما به طور کامل استدلال اصلی را در مورد عدم وجود اراده آزاد در پیچیدگی نوظهور را منعکس نمی‌کند. همچنین، برخی از توضیحات در پاسخ تولید شده کمی متفاوت از متن اصلی هستند.
+answer: پیچیدگی نوظهور نمی‌تواند پایه‌ای برای اختیار آزاد باشد، زیرا در سه مورد محدودیت دارد. اولاً، نمی‌توان صرفاً با پیروی از قراردادها گفت که دو چیز یکسان هستند، حتی اگر تفاوت مهمی وجود داشته باشد. دوم، حتی اگر یک سیستم نوظهور باشد، نمی‌تواند هر کاری را بخواهد انجام دهد و هنوز هم توسط اجزای تشکیل دهنده خود محدود می‌شود. در نهایت، سیستم‌های نوظهور نمی‌توانند از "آجر بودن" آجرها جلوگیری کنند.
+sources: ['determaind.txt — chunk 525', 'determaind.txt — chunk 425', 'determaind.txt — chunk 526', 'determaind.txt — chunk 524', 'determaind.txt — chunk 501']
+----------------------------------------------------------------------
+id: punishment_vs_public_safety  category: conceptual  true_negative: False
+question_fa: نویسنده به‌جای تنبیه انتقام‌جویانه، چه مدلی برای حفظ امنیت عمومی پیشنهاد می‌کند؟
+expected_filename: determaind.txt  expected_section: Chapter 14: The Joy of Punishment -> quarantine model
+retrieved_sources(top10): ['determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt']
+keyword_hit_ranks: [1, 4, 8, 9, 10]  first_hit_rank: 1
+recall@5: 1  recall@10: 1  mrr_contrib: 1.000
+is_refusal: False  false_refusal: False
+llm_judge: correctness=partial  faithful=yes  reason=پاسخ تولید شده برخی از جنبه‌های مدل قرنطینه را به درستی بیان می‌کند، اما جزئیات و استدلال‌های اصلی را به طور کامل پوشش نمی‌دهد. پاسخ با متن بازیابی شده سازگار است.
+answer: نویسنده مدل قرنطینه را برای آشتی دادن بین فقدان اراده آزاد و محافظت از جامعه در برابر افراد خطرناک پیشنهاد می‌کند. این مدل بر تناسب‌نگر پیش‌رو تمرکز دارد، جایی که هرچه خطر در آینده بیشتر باشد، محدودیت‌های بیشتری لازم است. نویسنده همچنین اشاره می‌کند که این مدل شبیه به رویکرد متخصصان بهداشت عمومی است که از آسیب‌های ناشی از عوامل خارجی جلوگیری می‌کنند.
+sources: ['determaind.txt — chunk 938', 'determaind.txt — chunk 932', 'determaind.txt — chunk 920', 'determaind.txt — chunk 926', 'determaind.txt — chunk 16']
+----------------------------------------------------------------------
+id: change_under_determinism  category: conceptual  true_negative: False
+question_fa: اگر اختیار آزاد وجود ندارد، طبق این کتاب رفتار انسان چگونه تغییر می‌کند؟
+expected_filename: determaind.txt  expected_section: Chapter 12: The Ancient Gears within Us: How Does Change Happen?
+retrieved_sources(top10): ['determaind.txt', 'نامشخص', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'نامشخص', 'determaind.txt', 'نامشخص', 'determaind.txt', 'determaind.txt']
+keyword_hit_ranks: []  first_hit_rank: None
+recall@5: 0  recall@10: 0  mrr_contrib: 0.000
+is_refusal: False  false_refusal: False
+llm_judge: correctness=partial  faithful=yes  reason=پاسخ تولید شده برخی از نکات را در بر می گیرد، اما به طور کامل با پاسخ مرجع مطابقت ندارد. پاسخ تولید شده بر روی پیامدهای منفی رد اختیار آزاد تمرکز دارد، در حالی که پاسخ مرجع بر جنبه های مثبت و امیدوارکننده آن تأکید دارد.
+answer: طبق این کتاب، اگر اعتقاد به اختیار آزاد از بین برود، افراد کمتر حس مالکیت، معنا و خودآگاهی دارند و کمتر سپاسگزار مهربانی دیگران هستند. آن‌ها همچنین کمتر اخلاقی، کمتر مفید و تهاجمی‌تر رفتار می‌کنند. این کتاب همچنین به بررسی این موضوع می‌پردازد که چگونه برخی از پیامدهای رد اعتقاد به اختیار آزاد فاجعه‌بار نیستند.
+sources: ['determaind.txt — chunk 662', 'نامشخص — chunk ?', 'determaind.txt — chunk 20', 'determaind.txt — chunk 714', 'determaind.txt — chunk 30']
+----------------------------------------------------------------------
+id: poverty_success_deservedness  category: conceptual  true_negative: False
+question_fa: نویسنده چه نقدی به ایده‌ی «لایق بودن» (deservedness) برای فقر یا موفقیت در زندگی دارد؟
+expected_filename: determaind.txt  expected_section: Chapter 1 (Dennett runner metaphor) / Chapter 15: If You Die Poor
+retrieved_sources(top10): ['determaind.txt', 'determaind.txt', 'نامشخص', 'نامشخص', 'نامشخص', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt']
+keyword_hit_ranks: [7]  first_hit_rank: 7
+recall@5: 0  recall@10: 1  mrr_contrib: 0.143
+is_refusal: False  false_refusal: False
+llm_judge: correctness=partial  faithful=yes  reason=پاسخ تولید شده تا حدی درست است، اما جزئیات تمثیل دنیل دنت را که در پاسخ مرجع ذکر شده، ندارد. پاسخ با متن بازیابی شده سازگار است.
+answer: نویسنده استدلال می‌کند که هیچ «لایق بودن» قابل توجیهی برای داشتن نیازها و خواسته‌های برآورده‌شده وجود ندارد. او معتقد است که هیچ انسانی کمتر از دیگری شایستگی ندارد که رفاه او در نظر گرفته شود. این دیدگاه ناشی از عدم درک زنجیره‌های علّی است که فرد را شکل داده‌اند.
+sources: ['determaind.txt — chunk 1043', 'determaind.txt — chunk 1071', 'نامشخص — chunk ?', 'نامشخص — chunk ?', 'نامشخص — chunk ?']
+----------------------------------------------------------------------
+id: phineas_gage_direct  category: direct  true_negative: False
+question_fa: ماجرای فینیاس گیج (Phineas Gage) که در کتاب آمده چیست؟
+expected_filename: determaind.txt  expected_section: Chapter 1: Turtles All the Way Down
+retrieved_sources(top10): ['نامشخص', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'نامشخص', 'determaind.txt', 'determaind.txt', 'نامشخص', 'determaind.txt', 'determaind.txt']
+keyword_hit_ranks: [2, 3]  first_hit_rank: 2
+recall@5: 1  recall@10: 1  mrr_contrib: 0.500
+is_refusal: False  false_refusal: False
+llm_judge: correctness=partial  faithful=yes  reason=پاسخ تولید شده جزئیات بیشتری دارد که در متن بازیابی شده نیست، اما اطلاعات اصلی را به درستی بیان می‌کند.
+answer: در سال 1848، حادثه انفجار دینامیت در یک کارگاه ساختمانی در ایالت ورمونت، یک میله فلزی را با سرعت زیاد به مغز یک کارگر به نام فینیاس گیج پرتاب کرد و از طرف دیگر خارج شد. این حادثه بخش زیادی از قشر پیشانی گیج را از بین برد و باعث شد او دچار تغییراتی در رفتار شود، از جمله ناسزانی، لجبازی و بی‌ثباتی. پس از این حادثه، دوست او گفت: «گیج دیگر گیج سابق نبود».
+sources: ['نامشخص — chunk ?', 'determaind.txt — chunk 41', 'determaind.txt — chunk 40', 'determaind.txt — chunk 639', 'نامشخص — chunk ?']
+----------------------------------------------------------------------
+id: laplace_demon_direct  category: direct  true_negative: False
+question_fa: «شیطان لاپلاس» (Laplace's demon) در کتاب به چه معناست؟
+expected_filename: determaind.txt  expected_section: Chapter 1: Turtles All the Way Down -> What Do I Mean by Determinism?
+retrieved_sources(top10): ['نامشخص', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'نامشخص', 'determaind.txt']
+keyword_hit_ranks: [2, 4, 5, 6, 8]  first_hit_rank: 2
+recall@5: 1  recall@10: 1  mrr_contrib: 0.500
+is_refusal: False  false_refusal: False
+llm_judge: correctness=partial  faithful=yes  reason=پاسخ به درستی مفهوم اصلی شیطان لاپلاس را بیان می‌کند، اما کمی بیش از حد جزئیات را اضافه کرده و مفهوم 'ابر انسان' را به آن نسبت می‌دهد که در متن اصلی وجود ندارد.
+answer: «شیطان لاپلاس» به یک ابرانسان اشاره دارد که می‌تواند مکان هر ذره در جهان را در یک لحظه بداند. این ابرانسان قادر خواهد بود هر لحظه در آینده را به طور دقیق پیش‌بینی کند و همچنین با بازسازی مکان دقیق هر ذره در گذشته، به حالتی مشابه وضعیت فعلی برسد. این مفهوم از ایده اصلی پی‌یر سیمون لاپلاس نشأت گرفته است.
+sources: ['نامشخص — chunk ?', 'determaind.txt — chunk 47', 'determaind.txt — chunk 1024', 'determaind.txt — chunk 48', 'determaind.txt — chunk 1172']
+----------------------------------------------------------------------
+id: libet_experiment_direct  category: direct  true_negative: False
+question_fa: آزمایش لیبت (Libet) درباره آگاهی از تصمیم چه چیزی را نشان داد؟
+expected_filename: determaind.txt  expected_section: Chapter 2: The Final Three Minutes of a Movie -> Three Hundred Milliseconds
+retrieved_sources(top10): ['determaind.txt', 'determaind.txt', 'نامشخص', 'نامشخص', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'نامشخص', 'determaind.txt']
+keyword_hit_ranks: [1, 2, 5, 6, 7, 8, 10]  first_hit_rank: 1
+recall@5: 1  recall@10: 1  mrr_contrib: 1.000
+is_refusal: False  false_refusal: False
+llm_judge: correctness=partial  faithful=yes  reason=پاسخ تولید شده برخی از نکات را بیان می‌کند، اما به طور کامل آزمایش لیبت و تفسیر آن را توضیح نمی‌دهد.
+answer: آزمایش لیبت نشان داد که حس آگاهانه انتخاب حدود ۲۰۰ میلی‌ثانیه قبل از شروع حرکت عضلات رخ می‌دهد. این آزمایش نتیجه‌گیری کرد که مغز به نظر می‌رسد قبل از اینکه فکر کنید تصمیم بگیرید، تصمیم گرفته است. با این حال، برخی از انتقادات نشان می‌دهد که در زمان شروع پتانسیل آمادگی، افراد ممکن است در مورد چیزهایی مانند شام فکر می‌کردند.
+sources: ['determaind.txt — chunk 68', 'determaind.txt — chunk 87', 'نامشخص — chunk ?', 'نامشخص — chunk ?', 'determaind.txt — chunk 106']
+----------------------------------------------------------------------
+id: cosmeticorexia_definition  category: direct  true_negative: False
+question_fa: اصطلاح «کاسمتیکورکسیا» (cosmeticorexia) به چه معناست و بیشتر در چه گروه سنی دیده می‌شود؟
+expected_filename: cosmeticorexia_fa.txt  expected_section: n/a (single Persian document, no chapter structure)
+retrieved_sources(top10): ['cosmeticorexia_fa.txt', 'نامشخص', 'نامشخص', 'نامشخص', 'cosmeticorexia_fa.txt', 'نامشخص', 'نامشخص', 'نامشخص', 'determaind.txt', 'determaind.txt']
+keyword_hit_ranks: [1, 5]  first_hit_rank: 1
+recall@5: 1  recall@10: 1  mrr_contrib: 1.000
+is_refusal: False  false_refusal: False
+llm_judge: correctness=correct  faithful=yes  reason=پاسخ تولید شده به درستی اصطلاح را تعریف کرده و گروه سنی را مشخص می‌کند و با متن بازیابی شده مطابقت دارد.
+answer: کاسمتیکورکسیا اصطلاحی است که متخصصان پوست و روانشناسان برای توصیف وسواس فکری در روتین‌های مراقبت از پوست و آرایش به کار می‌برند. این وضعیت بیشتر در میان نوجوانان و پیش‌نوجوانان، تقریباً در سنین ۹ تا ۱۷ سال، دیده می‌شود. این وسواس فکری اغلب توسط ترندهای شبکه‌های اجتماعی ایجاد می‌شود.
+sources: ['cosmeticorexia_fa.txt — chunk 1', 'نامشخص — chunk ?', 'نامشخص — chunk ?', 'نامشخص — chunk ?', 'cosmeticorexia_fa.txt — chunk 2']
+----------------------------------------------------------------------
+id: true_negative_keto_diet  category: true_negative  true_negative: True
+question_fa: کتاب درباره فواید رژیم غذایی کتوژنیک برای کاهش وزن چه می‌گوید؟
+expected_filename: None  expected_section: n/a - not covered by either document
+retrieved_sources(top10): ['determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'نامشخص', 'determaind.txt', 'determaind.txt', 'نامشخص', 'determaind.txt']
+keyword_hit_ranks: []  first_hit_rank: None
+is_refusal: True  true_negative_correct: True
+answer: اطلاعات کافی در اسناد موجود برای پاسخ به این سؤال وجود ندارد.
+sources: []
+----------------------------------------------------------------------
+id: true_negative_crypto  category: true_negative  true_negative: True
+question_fa: نویسنده چه نظری درباره سرمایه‌گذاری در بازارهای رمزارز دارد؟
+expected_filename: None  expected_section: n/a - not covered by either document
+retrieved_sources(top10): ['determaind.txt', 'نامشخص', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt', 'determaind.txt']
+keyword_hit_ranks: []  first_hit_rank: None
+is_refusal: True  true_negative_correct: True
+answer: اطلاعات کافی در اسناد موجود برای پاسخ به این سؤال وجود ندارد.
+sources: []

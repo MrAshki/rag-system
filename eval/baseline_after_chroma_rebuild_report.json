@@ -1,0 +1,1181 @@
+{
+  "aggregate": {
+    "n_items_total": 19,
+    "n_positive_items": 17,
+    "n_true_negative_items": 2,
+    "recall_at_5": 0.8823529411764706,
+    "recall_at_10": 0.9411764705882353,
+    "mrr": 0.7290849673202614,
+    "false_refusal_count": 0,
+    "true_negative_correct_count": 2,
+    "true_negative_hallucination_count": 0,
+    "elapsed_seconds": 403.0,
+    "ollama_model": "gemma3:12b",
+    "embedding_model": "./models/bge-m3",
+    "n_results_fetched": 10,
+    "llm_judge_enabled": true,
+    "judge_correct_count": 1,
+    "judge_partial_count": 15,
+    "judge_incorrect_count": 1,
+    "judge_faithful_yes_count": 14,
+    "judge_faithful_no_count": 0,
+    "judge_unparsed_or_error_count": 0
+  },
+  "items": [
+    {
+      "id": "turtles_all_the_way_down",
+      "category": "conceptual",
+      "question_fa": "منظور نویسنده از عبارت «لاک‌پشت‌ها تا آخر روی هم سوار شده‌اند» (turtles all the way down) در فصل اول چیست؟",
+      "expected_filename": "determaind.txt",
+      "expected_keywords": [
+        "turtles",
+        "floating in the air",
+        "turtles can't float",
+        "ridiculous and nonsensical"
+      ],
+      "expected_chapter_or_section": "Chapter 1: Turtles All the Way Down",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [
+        1,
+        2,
+        3,
+        5,
+        6,
+        7,
+        9
+      ],
+      "source_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "first_keyword_hit_rank": 1,
+      "recall_at_5": 1,
+      "recall_at_10": 1,
+      "mrr_contribution": 1.0,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "نویسنده از عبارت «لاک‌پشت‌ها تا آخر روی هم سوار شده‌اند» به عنوان یک شوخی استفاده می‌کند، زیرا ادعای اطمینان‌بخشی که به ویلیام جیمز ارائه شده نه تنها پوچ است، بلکه در برابر هر چالشی مصون است. این عبارت یک نسخه سطح بالایی از درگیری‌های توهین‌آمیز در حیاط مدرسه است. نویسنده از این داستان برای تمسخر کسی استفاده می‌کرد که به طور ناگهانی به یک انتقاد منفی چنگ می‌زند.",
+      "sources": [
+        "determaind.txt — chunk 5",
+        "determaind.txt — chunk 6",
+        "determaind.txt — chunk 235",
+        "determaind.txt — chunk 179",
+        "determaind.txt — chunk 633"
+      ],
+      "llm_judge": {
+        "correctness": "incorrect",
+        "faithful": "partial",
+        "reason": "پاسخ تولید شده به درستی مفهوم تمثیل لاک‌پشت‌ها را درک نکرده و به جای آن به یک شوخی و تمسخر اشاره می‌کند. در حالی که متن، داستان را به عنوان یک شوخی توصیف می‌کند، اما هدف اصلی نویسنده نشان دادن این است که علت‌ها تا بی‌نهایت قابل ردیابی هستند."
+      }
+    },
+    {
+      "id": "neuron_that_started_process",
+      "category": "conceptual",
+      "question_fa": "نویسنده برای رد کردن اختیار آزاد چه چالشی درباره پیدا کردن یک نورون مطرح می‌کند؟",
+      "expected_filename": "determaind.txt",
+      "expected_keywords": [
+        "find me the neuron",
+        "action potential",
+        "causeless cause",
+        "started this process"
+      ],
+      "expected_chapter_or_section": "Chapter 1: Turtles All the Way Down -> Ground Rules and Definitions -> What Do I Mean by Free Will?",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [
+        2
+      ],
+      "source_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "first_keyword_hit_rank": 2,
+      "recall_at_5": 1,
+      "recall_at_10": 1,
+      "mrr_contribution": 0.5,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "نویسنده برای رد کردن اختیار آزاد، از مردم خواسته است که یک نورونی را نشان دهند که بدون هیچ دلیلی یک رفتار کامل و منسجم را آغاز می‌کند. او همچنین از مردم خواسته است که یک نورونی را نشان دهند که به طور مساوی در جلوگیری از یک عمل خودکفا بوده است. نویسنده معتقد است که نورون‌های اختیار آزاد یا اختیار نخواهی وجود ندارند.",
+      "sources": [
+        "determaind.txt — chunk 501",
+        "determaind.txt — chunk 46",
+        "determaind.txt — chunk 624",
+        "determaind.txt — chunk 105",
+        "determaind.txt — chunk 651"
+      ],
+      "llm_judge": {
+        "correctness": "partial",
+        "faithful": "yes",
+        "reason": "پاسخ تولید شده برخی از جزئیات را اضافه کرده است (مانند جلوگیری از عمل)، که در متن اصلی وجود ندارد، اما مفهوم اصلی را به درستی منتقل کرده است."
+      }
+    },
+    {
+      "id": "final_three_minutes_metaphor",
+      "category": "conceptual",
+      "question_fa": "استعاره «سه دقیقه پایانی یک فیلم» (the final three minutes of a movie) در فصل دوم به چه معناست؟",
+      "expected_filename": "determaind.txt",
+      "expected_keywords": [
+        "Final Three Minutes",
+        "Libet",
+        "readiness potential",
+        "Three Hundred Milliseconds"
+      ],
+      "expected_chapter_or_section": "Chapter 2: The Final Three Minutes of a Movie",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [
+        1,
+        2,
+        3
+      ],
+      "source_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "first_keyword_hit_rank": 1,
+      "recall_at_5": 1,
+      "recall_at_10": 1,
+      "mrr_contribution": 1.0,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "استعاره «سه دقیقه پایانی یک فیلم» (the final three minutes of a movie) به این معنی است که بدون داشتن دیدگاه بزرگتر، درک ویژگی‌ها و پیامدهای قصد، بی‌فایده است. این استعاره نشان می‌دهد که درک کامل یک موضوع نیازمند در نظر گرفتن تمام جوانب آن است، نه فقط بخش کوچکی از آن. این استعاره در بخش 58 آمده است.",
+      "sources": [
+        "determaind.txt — chunk 54",
+        "determaind.txt — chunk 59",
+        "determaind.txt — chunk 58",
+        "determaind.txt — chunk 1024",
+        "determaind.txt — chunk 297"
+      ],
+      "llm_judge": {
+        "correctness": "partial",
+        "faithful": "partial",
+        "reason": "The answer captures the general idea of the metaphor but misses the nuance about the chain of causation and the focus on the final moment obscuring the preceding events. It also incorrectly states the location of the metaphor. The answer is partially faithful as it references the importance of a larger perspective, but it doesn't fully reflect the context's explanation."
+      }
+    },
+    {
+      "id": "free_wont_veto",
+      "category": "conceptual",
+      "question_fa": "منظور از «اراده‌ی نه‌گفتن» (Free Won't) و قدرت وتو در کتاب چیست؟",
+      "expected_filename": "determaind.txt",
+      "expected_keywords": [
+        "Free Won",
+        "veto",
+        "slam our foot on the brake",
+        "neither free-will nor free-won't"
+      ],
+      "expected_chapter_or_section": "Chapter 2: The Final Three Minutes of a Movie -> Free Won't: The Power to Veto",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [
+        5
+      ],
+      "source_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "first_keyword_hit_rank": 5,
+      "recall_at_5": 1,
+      "recall_at_10": 1,
+      "mrr_contribution": 0.2,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "«اراده‌ی نه‌گفتن» (Free Won't) به توانایی متوقف کردن یک عمل در کسری از ثانیه اشاره دارد. مطالعات نشان داده‌اند که در این حالت، پتانسیل آمادگی در مغز کاهش می‌یابد و از بین می‌رود. این موضوع در بررسی‌های مربوط به رفتار انسان، مانند رفتار یک قمارباز در حال باخت یا تأثیر الکل، مورد مطالعه قرار گرفته است.",
+      "sources": [
+        "determaind.txt — chunk 29",
+        "determaind.txt — chunk 20",
+        "determaind.txt — chunk 21",
+        "determaind.txt — chunk 254",
+        "determaind.txt — chunk 102"
+      ],
+      "llm_judge": {
+        "correctness": "partial",
+        "faithful": "partial",
+        "reason": "The answer correctly identifies 'free won't' as the ability to stop an action, but misses the crucial point about it also being determined by biological factors, as stated in the reference. The answer's details about brain activity are not directly supported by the provided context."
+      }
+    },
+    {
+      "id": "intent_seconds_minutes",
+      "category": "conceptual",
+      "question_fa": "طبق فصل سوم، نیت ما در عرض ثانیه‌ها تا دقیقه‌ها پیش از یک تصمیم چگونه شکل می‌گیرد؟",
+      "expected_filename": "determaind.txt",
+      "expected_keywords": [
+        "Seconds to Minutes Before",
+        "insula",
+        "disgust",
+        "sensory"
+      ],
+      "expected_chapter_or_section": "Chapter 3: Where Does Intent Come From? -> Seconds to Minutes Before",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [
+        1,
+        2,
+        3
+      ],
+      "source_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "first_keyword_hit_rank": 1,
+      "recall_at_5": 1,
+      "recall_at_10": 1,
+      "mrr_contribution": 1.0,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "طبق فصل سوم، نیت ما در عرض ثانیه‌ها تا دقیقه‌ها پیش از یک تصمیم با اطلاعات حسی که به مغز ما وارد می‌شود (از جمله اطلاعاتی که ما از آن آگاه نیستیم) شکل می‌گیرد. این اطلاعات حسی می‌تواند واضح باشد، مانند شنیدن یک دستور یا دیدن یک سلاح، یا می‌تواند ظریف‌تر باشد، مانند دیدن تصویری از شخصی که یک شیء را در دست دارد. تصمیمات ما در این ثانیه‌ها می‌تواند تحت تأثیر عواملی مانند جنسیت، نژاد، سن و حالت چهره فرد تصویر شده قرار گیرد.",
+      "sources": [
+        "determaind.txt — chunk 134",
+        "determaind.txt — chunk 133",
+        "determaind.txt — chunk 131",
+        "determaind.txt — chunk 58",
+        "determaind.txt — chunk 110"
+      ],
+      "llm_judge": {
+        "correctness": "partial",
+        "faithful": "yes",
+        "reason": "پاسخ تولید شده تا حدودی درست است، اما جزئیات بیشتری را ارائه می دهد که در متن اصلی وجود ندارد. پاسخ به طور کلی با زمینه مطابقت دارد."
+      }
+    },
+    {
+      "id": "intent_hormones_days",
+      "category": "conceptual",
+      "question_fa": "هورمون‌ها در عرض دقیقه‌ها تا روزها چگونه روی نیت و تصمیم‌گیری اثر می‌گذارند؟",
+      "expected_filename": "determaind.txt",
+      "expected_keywords": [
+        "testosterone",
+        "oxytocin",
+        "glucocorticoids",
+        "Minutes to Days Before"
+      ],
+      "expected_chapter_or_section": "Chapter 3: Where Does Intent Come From? -> Minutes to Days Before",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [
+        3,
+        4,
+        6,
+        8,
+        9,
+        10
+      ],
+      "source_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "first_keyword_hit_rank": 3,
+      "recall_at_5": 1,
+      "recall_at_10": 1,
+      "mrr_contribution": 0.3333333333333333,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "هورمون‌ها در عرض دقیقه‌ها تا روزها می‌توانند با تغییراتی در مغز، احتمال بروز رفتارهای خاص را تغییر دهند، اما آن‌ها را مستقیماً ایجاد نمی‌کنند. این تغییرات شامل آزادسازی انتقال‌دهنده‌های عصبی، باز یا بسته شدن کانال‌های یونی و تغییر در تعداد گیرنده‌های پیام‌رسان در مناطق خاصی از مغز است. به عنوان مثال، تستوسترون می‌تواند باعث تهاجم شود و سطح بالاتر آن احتمال تصمیم‌گیری تهاجمی را افزایش می‌دهد.",
+      "sources": [
+        "determaind.txt — chunk 164",
+        "determaind.txt — chunk 163",
+        "determaind.txt — chunk 149",
+        "determaind.txt — chunk 150",
+        "determaind.txt — chunk 589"
+      ],
+      "llm_judge": {
+        "correctness": "partial",
+        "faithful": "yes",
+        "reason": "The answer mentions hormonal effects on aggression (testosterone) and brain changes, aligning with the reference and context. However, it lacks the specific details about oxytocin, vasopressin, and glucocorticoids mentioned in the reference, and it focuses more on mechanisms than the overall effect described."
+      }
+    },
+    {
+      "id": "intent_layers_full_chain",
+      "category": "conceptual",
+      "question_fa": "نویسنده چگونه نشان می‌دهد که نیت ما لایه به لایه از ثانیه‌ها تا ژن‌ها، فرهنگ و حتی تکامل شکل گرفته است؟",
+      "expected_filename": "determaind.txt",
+      "expected_keywords": [
+        "Seconds to Minutes Before",
+        "Weeks to Years Before",
+        "Back to Adolescence",
+        "Genes",
+        "Evolution"
+      ],
+      "expected_chapter_or_section": "Chapter 3: Where Does Intent Come From? (full chapter span)",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        7,
+        9
+      ],
+      "source_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "first_keyword_hit_rank": 1,
+      "recall_at_5": 1,
+      "recall_at_10": 1,
+      "mrr_contribution": 1.0,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "نویسنده توضیح می‌دهد که نیت ما نتیجه‌ی تعاملات بین زیست‌شناسی و محیط است که قبل از شکل‌گیری آن نیت رخ داده‌اند. این تعاملات شامل ثانیه‌ها تا دقایق قبل، سال‌ها و دهه‌ها قبل، دوران نوجوانی و کودکی، و حتی ادغام اسپرم و تخمک برای شکل‌گیری ژنوم ما می‌شود. علاوه بر این، نویسنده به تأثیر فرهنگ و تکامل بر رفتار ما اشاره می‌کند.",
+      "sources": [
+        "determaind.txt — chunk 132",
+        "determaind.txt — chunk 631",
+        "determaind.txt — chunk 226",
+        "determaind.txt — chunk 133",
+        "determaind.txt — chunk 13"
+      ],
+      "llm_judge": {
+        "correctness": "partial",
+        "faithful": "yes",
+        "reason": "پاسخ تولید شده به طور کلی درست است، اما جزئیات دقیق فصل سوم را ذکر نکرده است. پاسخ با متن بازیابی شده مطابقت دارد."
+      }
+    },
+    {
+      "id": "chaos_vs_unpredictability",
+      "category": "conceptual",
+      "question_fa": "طبق فصل آشوب (A Primer on Chaos)، تفاوت بین آشوب (chaos) واقعی و صِرف غیرقابل‌پیش‌بینی بودن چیست؟",
+      "expected_filename": "determaind.txt",
+      "expected_keywords": [
+        "Lorenz",
+        "sensitive dependence on initial conditions",
+        "nonlinear",
+        "butterfly effect"
+      ],
+      "expected_chapter_or_section": "Chapter 5: A Primer on Chaos",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [
+        9,
+        10
+      ],
+      "source_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "first_keyword_hit_rank": 9,
+      "recall_at_5": 0,
+      "recall_at_10": 1,
+      "mrr_contribution": 0.1111111111111111,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "طبق فصل آشوب، آشوب (chaos) واقعی قطعی (deterministic) است، در حالی که صرفاً غیرقابل‌پیش‌بینی بودن به این معنی است که نمی‌توانید پیش‌بینی کنید چه اتفاقی خواهد افتاد. حتی اگر آشوب غیرقابل‌پیش‌بینی باشد، همچنان قطعی است. این تفاوت را می‌توان به این صورت بیان کرد که قطعی بودن به شما امکان می‌دهد توضیح دهید چرا چیزی اتفاق افتاده است، در حالی که پیش‌بینی‌پذیری به شما امکان می‌دهد بگویید چه اتفاقی خواهد افتاد.",
+      "sources": [
+        "determaind.txt — chunk 403",
+        "determaind.txt — chunk 412",
+        "determaind.txt — chunk 503",
+        "determaind.txt — chunk 402",
+        "determaind.txt — chunk 634"
+      ],
+      "llm_judge": {
+        "correctness": "partial",
+        "faithful": "yes",
+        "reason": "The answer correctly identifies determinism as a key aspect of chaos, but lacks the nuance about sensitive dependence on initial conditions present in the reference answer. The explanation of predictability vs. explainability is accurate and supported by the context."
+      }
+    },
+    {
+      "id": "quantum_randomness_vs_freedom",
+      "category": "conceptual",
+      "question_fa": "چرا نویسنده تصادفی بودن کوانتومی (quantum indeterminacy) را دلیل قانع‌کننده‌ای برای اختیار آزاد نمی‌داند؟",
+      "expected_filename": "determaind.txt",
+      "expected_keywords": [
+        "quantum indeterminacy",
+        "Bubbling Up",
+        "Eccles",
+        "random"
+      ],
+      "expected_chapter_or_section": "Chapter 9: A Primer on Quantum Indeterminacy / Chapter 10: Is Your Free Will Random?",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [
+        1,
+        2,
+        3,
+        6,
+        7,
+        8,
+        9
+      ],
+      "source_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "first_keyword_hit_rank": 1,
+      "recall_at_5": 1,
+      "recall_at_10": 1,
+      "mrr_contribution": 1.0,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "نویسنده استدلال می‌کند که تصادفی بودن کوانتومی به خودی خود به مشکل اختیار آزاد کمک نمی‌کند، زیرا تصادفی بودن تصادفی بودن را در ساختار اساسی جهان وارد می‌کند. جان سرل معتقد است که تصادفی بودن با اختیار آزاد یکی نیست و این سوال را مطرح می‌کند که \"چگونه از تصادفی بودن به عقلانیت می‌رسیم؟\". نویسنده همچنین استدلال می‌کند که اگر تصادفی بودن کوانتومی نقش مهمی در اختیار آزاد ایفا می‌کرد، هر فکر و عملی مستحق این ادعا بود که \"من نمی‌دانم چه بر سر من آمد.\"",
+      "sources": [
+        "determaind.txt — chunk 601",
+        "determaind.txt — chunk 605",
+        "determaind.txt — chunk 625",
+        "determaind.txt — chunk 399",
+        "determaind.txt — chunk 400"
+      ],
+      "llm_judge": {
+        "correctness": "partial",
+        "faithful": "yes",
+        "reason": "پاسخ تولید شده تا حدی درست است، اما به طور کامل توضیح نویسنده را ارائه نمی‌دهد. نویسنده استدلال می‌کند که تصادفی بودن کوانتومی به خودی خود به مشکل اختیار آزاد کمک نمی‌کند، زیرا تصادفی بودن تصادفی بودن را در ساختار اساسی جهان وارد می‌کند و در سطح مغز و رفتار «بالا نمی‌آید»."
+      }
+    },
+    {
+      "id": "emergent_complexity_vs_free_will",
+      "category": "conceptual",
+      "question_fa": "چرا پیچیدگی نوظهور (emergent complexity) نمی‌تواند پایه‌ای برای اختیار آزاد باشد؟",
+      "expected_filename": "determaind.txt",
+      "expected_keywords": [
+        "emergent complexity",
+        "emergent properties",
+        "List",
+        "waterfall"
+      ],
+      "expected_chapter_or_section": "Chapter 7: A Primer on Emergent Complexity / Chapter 8: Does Your Free Will Just Emerge?",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [
+        1,
+        2,
+        5,
+        7,
+        8
+      ],
+      "source_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "first_keyword_hit_rank": 1,
+      "recall_at_5": 1,
+      "recall_at_10": 1,
+      "mrr_contribution": 1.0,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "پیچیدگی نوظهور نمی‌تواند پایه‌ای برای اختیار آزاد باشد، زیرا در سه مورد محدودیت دارد. اولاً، نمی‌توان صرفاً با پیروی از قراردادها گفت که دو چیز یکسان هستند، حتی اگر به شکلی مهم متفاوت باشند. دوماً، حتی اگر سیستمی نوظهور باشد، نمی‌تواند انتخاب کند که هر کاری را می‌خواهد انجام دهد، زیرا هنوز از اجزای خود تشکیل شده و محدودیت‌های آنها را دارد. در نهایت، سیستم‌های نوظهور نمی‌توانند از \"آجر بودن\" آجرهایی که آنها را ساخته‌اند، جلوگیری کنند.",
+      "sources": [
+        "determaind.txt — chunk 525",
+        "determaind.txt — chunk 425",
+        "determaind.txt — chunk 526",
+        "determaind.txt — chunk 524",
+        "determaind.txt — chunk 501"
+      ],
+      "llm_judge": {
+        "correctness": "partial",
+        "faithful": "yes",
+        "reason": "پاسخ تا حدی درست است، اما به طور کامل با استدلال نویسنده مطابقت ندارد. نویسنده بیشتر بر این نکته تاکید دارد که پیچیدگی نوظهور همچنان دترمینیستی است، در حالی که پاسخ بیشتر بر محدودیت‌های سیستم‌های نوظهور تمرکز دارد."
+      }
+    },
+    {
+      "id": "punishment_vs_public_safety",
+      "category": "conceptual",
+      "question_fa": "نویسنده به‌جای تنبیه انتقام‌جویانه، چه مدلی برای حفظ امنیت عمومی پیشنهاد می‌کند؟",
+      "expected_filename": "determaind.txt",
+      "expected_keywords": [
+        "quarantine",
+        "deterrent value",
+        "public safety",
+        "leper colonies"
+      ],
+      "expected_chapter_or_section": "Chapter 14: The Joy of Punishment -> quarantine model",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [
+        1,
+        4,
+        8,
+        9,
+        10
+      ],
+      "source_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "first_keyword_hit_rank": 1,
+      "recall_at_5": 1,
+      "recall_at_10": 1,
+      "mrr_contribution": 1.0,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "نویسنده مدل قرنطینه را برای آشتی دادن بین فقدان اراده آزاد و محافظت از جامعه در برابر افراد خطرناک پیشنهاد می‌کند. این مدل بر تناسب‌نگر پیش‌رو تمرکز دارد، جایی که هرچه خطر در آینده بیشتر باشد، محدودیت‌های بیشتری لازم است. نویسنده همچنین اشاره می‌کند که این مدل شبیه به رویکرد متخصصان بهداشت عمومی است که از آسیب‌های ناشی از عوامل خارجی جلوگیری می‌کنند.",
+      "sources": [
+        "determaind.txt — chunk 938",
+        "determaind.txt — chunk 932",
+        "determaind.txt — chunk 920",
+        "determaind.txt — chunk 926",
+        "determaind.txt — chunk 16"
+      ],
+      "llm_judge": {
+        "correctness": "partial",
+        "faithful": "yes",
+        "reason": "پاسخ تولید شده برخی از جنبه‌های مدل قرنطینه را به درستی بیان می‌کند، اما جزئیات و استدلال‌های نویسنده را به طور کامل بازتاب نمی‌دهد. با این حال، اطلاعات ارائه شده در پاسخ با متن بازیابی شده مطابقت دارد."
+      }
+    },
+    {
+      "id": "change_under_determinism",
+      "category": "conceptual",
+      "question_fa": "اگر اختیار آزاد وجود ندارد، طبق این کتاب رفتار انسان چگونه تغییر می‌کند؟",
+      "expected_filename": "determaind.txt",
+      "expected_keywords": [
+        "we don't change our minds",
+        "changed by circumstances",
+        "sea slug",
+        "Ancient Gears"
+      ],
+      "expected_chapter_or_section": "Chapter 12: The Ancient Gears within Us: How Does Change Happen?",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [],
+      "source_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "first_keyword_hit_rank": null,
+      "recall_at_5": 0,
+      "recall_at_10": 0,
+      "mrr_contribution": 0.0,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "طبق این کتاب، اگر اعتقاد به اختیار آزاد از بین برود، افراد کمتر حس مالکیت، معنا و خودآگاهی دارند و کمتر سپاسگزار مهربانی دیگران هستند. علاوه بر این، آن‌ها کمتر اخلاقی، کمتر مفید و تهاجمی‌تر رفتار می‌کنند. این کتاب همچنین به بررسی این موضوع می‌پردازد که چگونه، حتی در یک دنیای قطعی، تغییر همچنان امکان‌پذیر است.",
+      "sources": [
+        "determaind.txt — chunk 662",
+        "determaind.txt — chunk 20",
+        "determaind.txt — chunk 714",
+        "determaind.txt — chunk 30",
+        "determaind.txt — chunk 50"
+      ],
+      "llm_judge": {
+        "correctness": "partial",
+        "faithful": "yes",
+        "reason": "پاسخ تولید شده برخی از نکات را از متن استخراج کرده است، اما به طور کامل با پاسخ مرجع مطابقت ندارد. پاسخ مرجع بر این نکته تمرکز دارد که تغییرات ناشی از شرایط بیرونی هستند، در حالی که پاسخ تولید شده بیشتر بر پیامدهای از بین رفتن اختیار آزاد تمرکز دارد."
+      }
+    },
+    {
+      "id": "poverty_success_deservedness",
+      "category": "conceptual",
+      "question_fa": "نویسنده چه نقدی به ایده‌ی «لایق بودن» (deservedness) برای فقر یا موفقیت در زندگی دارد؟",
+      "expected_filename": "determaind.txt",
+      "expected_keywords": [
+        "DESERVE winning",
+        "Dennett",
+        "poverty",
+        "deservedness"
+      ],
+      "expected_chapter_or_section": "Chapter 1 (Dennett runner metaphor) / Chapter 15: If You Die Poor",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [
+        4,
+        8
+      ],
+      "source_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "first_keyword_hit_rank": 4,
+      "recall_at_5": 1,
+      "recall_at_10": 1,
+      "mrr_contribution": 0.25,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "نویسنده استدلال می‌کند که ایده \"لایق بودن\" برای داشتن نیازها و خواسته‌ها، یا اینکه برخی افراد بیشتر از دیگران شایسته رفاه هستند، غیرقابل توجیه است. نویسنده معتقد است که هیچ کس از هر انسانی بیشتر شایسته برآورده شدن نیازهایش نیست. این باور ناشی از ناتوانی در درک علل و معلول‌های زیربنایی است و می‌تواند منجر به درد و امتیازات غیرقابل توجیه شود.",
+      "sources": [
+        "determaind.txt — chunk 1043",
+        "determaind.txt — chunk 1071",
+        "determaind.txt — chunk 359",
+        "determaind.txt — chunk 127",
+        "determaind.txt — chunk 1067"
+      ],
+      "llm_judge": {
+        "correctness": "partial",
+        "faithful": "yes",
+        "reason": "پاسخ تولید شده تا حدی درست است، اما به طور کامل به تمثیل دنیل دنت اشاره نمی‌کند. با این حال، استدلال اصلی نویسنده در مورد عدم شایستگی را به درستی منعکس می‌کند."
+      }
+    },
+    {
+      "id": "phineas_gage_direct",
+      "category": "direct",
+      "question_fa": "ماجرای فینیاس گیج (Phineas Gage) که در کتاب آمده چیست؟",
+      "expected_filename": "determaind.txt",
+      "expected_keywords": [
+        "Phineas Gage",
+        "frontal cortex",
+        "1848",
+        "dynamite"
+      ],
+      "expected_chapter_or_section": "Chapter 1: Turtles All the Way Down",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [
+        1,
+        2
+      ],
+      "source_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "first_keyword_hit_rank": 1,
+      "recall_at_5": 1,
+      "recall_at_10": 1,
+      "mrr_contribution": 1.0,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "در سال 1848، در یک کارگاه ساختمانی در ایالت ورمونت، انفجار دینامیت یک میله فلزی را با سرعت بالا به مغز یک کارگر به نام فینیاس گیج پرتاب کرد و از طرف دیگر خارج شد. این حادثه بخش زیادی از قشر پیشین گیج را از بین برد، ناحیه‌ای که برای عملکردهای اجرایی، برنامه‌ریزی بلندمدت و کنترل تکانه ضروری است. پس از این حادثه، گیج دچار تغییراتی شد و دیگر \"گیج سابق\" نبود.",
+      "sources": [
+        "determaind.txt — chunk 41",
+        "determaind.txt — chunk 40",
+        "determaind.txt — chunk 639",
+        "determaind.txt — chunk 1024",
+        "determaind.txt — chunk 761"
+      ],
+      "llm_judge": {
+        "correctness": "partial",
+        "faithful": "yes",
+        "reason": "پاسخ تولید شده جزئیات بیشتری را ارائه می دهد که در پاسخ مرجع وجود ندارد، اما اطلاعات اصلی را به درستی منتقل می کند."
+      }
+    },
+    {
+      "id": "laplace_demon_direct",
+      "category": "direct",
+      "question_fa": "«شیطان لاپلاس» (Laplace's demon) در کتاب به چه معناست؟",
+      "expected_filename": "determaind.txt",
+      "expected_keywords": [
+        "Laplace",
+        "demon",
+        "every particle",
+        "determinism"
+      ],
+      "expected_chapter_or_section": "Chapter 1: Turtles All the Way Down -> What Do I Mean by Determinism?",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [
+        1,
+        3,
+        4,
+        5,
+        7,
+        9
+      ],
+      "source_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "first_keyword_hit_rank": 1,
+      "recall_at_5": 1,
+      "recall_at_10": 1,
+      "mrr_contribution": 1.0,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "شیطان لاپلاس به ادعای کلاسیک برای همه تعیین‌گرها اشاره دارد: اگر کسی که مکان هر ذره در جهان را در این لحظه می‌داند، وجود داشته باشد، او قادر خواهد بود هر لحظه از آینده را به طور دقیق پیش‌بینی کند. این مفهوم در حالی که کاملاً درست نیست، همچنان در دیدگاه‌های معاصر از تعیین‌گرایی وجود دارد.",
+      "sources": [
+        "determaind.txt — chunk 47",
+        "determaind.txt — chunk 1024",
+        "determaind.txt — chunk 48",
+        "determaind.txt — chunk 1172",
+        "determaind.txt — chunk 799"
+      ],
+      "llm_judge": {
+        "correctness": "partial",
+        "faithful": "yes",
+        "reason": "پاسخ به طور کلی درست است اما اشاره به این نکته که شیطان لاپلاس کاملاً درست نیست، کمی گمراه کننده است. پاسخ اصلی به طور ضمنی این نکته را بیان می‌کند."
+      }
+    },
+    {
+      "id": "libet_experiment_direct",
+      "category": "direct",
+      "question_fa": "آزمایش لیبت (Libet) درباره آگاهی از تصمیم چه چیزی را نشان داد؟",
+      "expected_filename": "determaind.txt",
+      "expected_keywords": [
+        "Libet",
+        "readiness potential",
+        "conscious",
+        "Three Hundred Milliseconds"
+      ],
+      "expected_chapter_or_section": "Chapter 2: The Final Three Minutes of a Movie -> Three Hundred Milliseconds",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "source_hit_ranks": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "first_keyword_hit_rank": 1,
+      "recall_at_5": 1,
+      "recall_at_10": 1,
+      "mrr_contribution": 1.0,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "آزمایش لیبت نشان داد که مغز ممکن است قبل از اینکه فرد آگاهانه تصمیم بگیرد، تصمیم‌گیری را آغاز کرده باشد. این یافته‌ها منجر به \"لیبت 2.0\" شدند، که در آن، حس آگاهانه انتخاب حدود 200 میلی‌ثانیه قبل از شروع حرکت عضلات رخ می‌داد. با این حال، برخی از مطالعات نشان دادند که در زمان پتانسیل آمادگی، افراد ممکن است به چیزهایی مانند شام فکر می‌کردند، نه زمان حرکت.",
+      "sources": [
+        "determaind.txt — chunk 68",
+        "determaind.txt — chunk 87",
+        "determaind.txt — chunk 106",
+        "determaind.txt — chunk 119",
+        "determaind.txt — chunk 85"
+      ],
+      "llm_judge": {
+        "correctness": "partial",
+        "faithful": "yes",
+        "reason": "پاسخ تولید شده برخی از جزئیات را اضافه کرده است (مانند \"لیبت 2.0\" و فکر کردن به شام) که در متن بازیابی شده ذکر شده است، اما این جزئیات دقیقاً در پاسخ مرجع وجود ندارد. با این حال، مفهوم اصلی آزمایش لیبت را به درستی منتقل کرده است."
+      }
+    },
+    {
+      "id": "cosmeticorexia_definition",
+      "category": "direct",
+      "question_fa": "اصطلاح «کاسمتیکورکسیا» (cosmeticorexia) به چه معناست و بیشتر در چه گروه سنی دیده می‌شود؟",
+      "expected_filename": "cosmeticorexia_fa.txt",
+      "expected_keywords": [
+        "کاسمتیکورکسیا",
+        "روتین",
+        "نوجوانان",
+        "۹ تا ۱۷"
+      ],
+      "expected_chapter_or_section": "n/a (single Persian document, no chapter structure)",
+      "is_true_negative": false,
+      "retrieved_top10_sources": [
+        "cosmeticorexia_fa.txt",
+        "cosmeticorexia_fa.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [
+        1,
+        2
+      ],
+      "source_hit_ranks": [
+        1,
+        2
+      ],
+      "first_keyword_hit_rank": 1,
+      "recall_at_5": 1,
+      "recall_at_10": 1,
+      "mrr_contribution": 1.0,
+      "is_refusal": false,
+      "false_refusal": false,
+      "true_negative_correct": null,
+      "answer": "کاسمتیکورکسیا اصطلاحی است که متخصصان پوست و روانشناسان برای توصیف وسواس فکری در روتین‌های مراقبت از پوست و آرایش استفاده می‌کنند. این وضعیت بیشتر در میان نوجوانان و پیش‌نوجوانان، تقریباً در سنین ۹ تا ۱۷ سال، دیده می‌شود.",
+      "sources": [
+        "cosmeticorexia_fa.txt — chunk 1",
+        "cosmeticorexia_fa.txt — chunk 2",
+        "determaind.txt — chunk 175",
+        "determaind.txt — chunk 855",
+        "determaind.txt — chunk 330"
+      ],
+      "llm_judge": {
+        "correctness": "correct",
+        "faithful": "yes",
+        "reason": "پاسخ تولید شده به درستی اصطلاح کاسمتیکورکسیا را تعریف کرده و گروه سنی مرتبط را مشخص کرده است. اطلاعات از متن بازیابی شده پشتیبانی می شود."
+      }
+    },
+    {
+      "id": "true_negative_keto_diet",
+      "category": "true_negative",
+      "question_fa": "کتاب درباره فواید رژیم غذایی کتوژنیک برای کاهش وزن چه می‌گوید؟",
+      "expected_filename": null,
+      "expected_keywords": [
+        "ketogenic",
+        "keto diet",
+        "low-carb weight loss"
+      ],
+      "expected_chapter_or_section": "n/a - not covered by either document",
+      "is_true_negative": true,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [],
+      "source_hit_ranks": [],
+      "first_keyword_hit_rank": null,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "mrr_contribution": null,
+      "is_refusal": true,
+      "false_refusal": false,
+      "true_negative_correct": true,
+      "answer": "اطلاعات کافی در اسناد موجود برای پاسخ به این سؤال وجود ندارد.",
+      "sources": [],
+      "llm_judge": null
+    },
+    {
+      "id": "true_negative_crypto",
+      "category": "true_negative",
+      "question_fa": "نویسنده چه نظری درباره سرمایه‌گذاری در بازارهای رمزارز دارد؟",
+      "expected_filename": null,
+      "expected_keywords": [
+        "cryptocurrency",
+        "bitcoin",
+        "crypto investment"
+      ],
+      "expected_chapter_or_section": "n/a - not covered by either document",
+      "is_true_negative": true,
+      "retrieved_top10_sources": [
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt",
+        "determaind.txt"
+      ],
+      "keyword_hit_ranks": [],
+      "source_hit_ranks": [],
+      "first_keyword_hit_rank": null,
+      "recall_at_5": null,
+      "recall_at_10": null,
+      "mrr_contribution": null,
+      "is_refusal": true,
+      "false_refusal": false,
+      "true_negative_correct": true,
+      "answer": "اطلاعات کافی در اسناد موجود برای پاسخ به این سؤال وجود ندارد.",
+      "sources": [],
+      "llm_judge": null
+    }
+  ]
+}

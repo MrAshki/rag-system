@@ -1,0 +1,159 @@
+LLM-ASSISTED NORMALIZATION STEP REPORT (Step 2.5)
+Chroma NOT touched. No reindex/migration. No full eval/run_eval.py run.
+Nothing downloaded/installed. OCR NOT implemented. No Chroma collection
+access made at all (not even read-only) during this step.
+
+FILES ADDED
+- llm_normalize.py (prompt template, batch builder, Ollama wrapper, strict
+  JSON parser/validator, per-batch fallback, label-merge/reassembly)
+- eval/llm_normalization_step_report.json / .txt (this report)
+
+FILES CHANGED
+- ingest.py: exposes tokenizer blocks before Markdown rendering; wires an
+  optional LLM relabeling step between tokenize and render; adds 7 new
+  metadata fields; adds force_llm_normalization parameter to
+  normalize_txt/normalize_docx/normalize_pdf/normalize_document.
+- .env.example: added ENABLE_LLM_NORMALIZATION, LLM_NORMALIZATION_MODEL,
+  LLM_NORMALIZATION_NUM_CTX, LLM_NORMALIZATION_MAX_BATCHES, and documented
+  the previously-undocumented ENABLE_OCR_FALLBACK from Step 2.
+
+FILES NOT CHANGED
+app.py needed NO changes -- the new parameter defaults to False and the new
+env flags default to off, so existing upload behavior is byte-for-byte
+unchanged unless someone explicitly turns ENABLE_LLM_NORMALIZATION on.
+chunker.py, rag.py untouched. Chroma and the 3 currently-indexed documents'
+converted/*.md were not modified.
+
+DEFAULT CONFIG (confirmed off)
+ENABLE_LLM_NORMALIZATION=false
+LLM_NORMALIZATION_MODEL=gemma3:12b
+LLM_NORMALIZATION_NUM_CTX=4096
+LLM_NORMALIZATION_MAX_BATCHES=20
+
+DESIGN
+Pipeline: deterministic tokenize -> explode blocks into classifiable units
+(list blocks split into individual items) -> optional LLM relabeling
+(batched, sequential, carrying a heading-stack context forward) -> reassemble
+blocks using the ORIGINAL text + new label -> render Markdown -> save.
+
+Core safety property: the LLM receives only numbered text previews and
+returns ONLY {index, label} JSON pairs -- it never outputs document text.
+Our code always splices back the original, untouched block text. This makes
+content mutation structurally impossible, not just something we check for
+afterward. Validation is mostly schema-level (clean JSON, exactly one label
+per index, no duplicates/out-of-range, label in the allowed enum) rather
+than fuzzy text-similarity diffing.
+Fallback is per-batch: one bad batch reverts only its own units to their
+deterministic labels, not the whole document.
+Trigger: runs only if ENABLE_LLM_NORMALIZATION=true AND (forced OR
+structure_confidence is low/medium); never runs on high-confidence docs;
+skips automatically if estimated batch count exceeds the cap (unless forced).
+
+TARGETED TEST RESULTS
+
+1) Mocked validator/fallback tests (10/10 passed, no real Ollama call needed):
+   well-formed JSON, malformed/truncated JSON, JSON found via brace-scan,
+   missing index, duplicate index, out-of-range index, invalid enum label,
+   classify_document full-batch fallback on Ollama exception, full-batch
+   fallback on malformed JSON, and correct label application on a valid
+   response. All PASS.
+
+2) Real LLM test on Questline_Theory.docx (gemma3:12b, num_ctx=4096,
+   force_llm_normalization=True): 145 units, 9 batches, 0 batch fallbacks,
+   llm_validation_status=passed, normalization_mode=llm_assisted,
+   elapsed 134.2s. heading_count 29 -> 21.
+
+   CONTENT PRESERVATION: PERFECT.
+   Word count before/after: 2366 / 2366. Word multiset identical. Word
+   SEQUENCE identical (order fully preserved). Content-only char count
+   before/after: 11056 / 11056. Zero words added, removed, or reordered --
+   only structural labels changed. This is the core safety property and it
+   held exactly as designed.
+
+   TARGETED ISSUE CHECKS:
+   - Flow-line should not become heading: FIXED. "اقدام واقعی → تایید →
+     بازخورد فوری..." is now plain paragraph text, not a heading.
+   - QR/GPS check-in should stay list items: FIXED. Both are now bullets,
+     not headings.
+   - Persian numbered sections remain headings: PARTIAL. All 15 numbered
+     sections stayed headings (none demoted to plain text), but sections 4
+     and 5 were inconsistently leveled as heading_3 instead of heading_2
+     like their siblings (1-3, 6-15).
+   - Real bullets remain bullets: PARTIAL. Most explicit bullets preserved
+     correctly, but 2 items in the closing list ("اعتماد در marketplace",
+     "هویت دیجیتال ورزشی") were wrongly promoted to heading_2, and one item
+     ("و ارزش واقعی در مارکت") lost its bullet marker (demoted to a bare
+     paragraph -- its TEXT is fully intact, just unmarked).
+
+   NEW ISSUES OBSERVED (not present in the deterministic-only output):
+   - The document's subtitle (correctly a plain paragraph before) was
+     wrongly promoted to a SECOND level-1 "#" title heading.
+   - The 7 structurally-identical mini-framework labels (Cue / Action /
+     Proof / Feedback / Identity / Value / Next Path) were classified
+     inconsistently: 4 as bullets, 2 as heading_2, 1 as plain paragraph --
+     same semantic role, three different outcomes.
+   - Heading-level drift across batch boundaries (sections 4/5), despite the
+     heading-stack context-carrying mechanism meant to prevent exactly this.
+
+3) UTF-8 Persian integrity check: PASS. Round-trip identical, نیم‌فاصله
+   present, Persian digits present, guillemets «» present, zero mojibake
+   replacement characters.
+
+HONEST ASSESSMENT
+The safety design is fully validated: across 145 classified units and 9 real
+LLM batches, content preservation was perfect. The label-only architecture
+worked exactly as intended -- zero content mutation even though the model's
+labeling itself was imperfect. On label QUALITY: the two originally-reported
+issues are reliably fixed. But the LLM pass also introduced new structural
+inconsistencies absent from the deterministic-only output (duplicate title,
+heading-level drift, inconsistent treatment of repeated framework labels).
+Net structural quality on this one real document is a mixed improvement, not
+a clean win. This is exactly the predicted risk from the Step 2.5 plan ("a
+wrong label is still possible; quality risk, not corruption risk") -- and
+exactly why ENABLE_LLM_NORMALIZATION defaults to off pending your review,
+rather than being enabled automatically.
+
+WHERE TO INSPECT THE OUTPUT
+converted/48480f24643b40fbb0b04f4a5f2e9634.llm_assisted_sample.md -- the full
+LLM-relabeled Markdown from the real test (saved alongside, does not replace
+or affect the document's actual indexed converted/*.md, which is unchanged).
+  code "D:\rag-system\converted\48480f24643b40fbb0b04f4a5f2e9634.llm_assisted_sample.md"
+Compare against the existing deterministic version:
+  code "D:\rag-system\converted\48480f24643b40fbb0b04f4a5f2e9634.md"
+
+METADATA FIELDS ADDED
+llm_normalization_used (bool), llm_model (string|null), llm_validation_status
+(not_attempted|skipped_too_many_batches|passed|partial|failed),
+llm_validation_warnings (list of strings), normalization_mode
+(deterministic|llm_assisted|fallback), llm_batches_total (int),
+llm_batches_fallback_count (int).
+
+FALLBACK / WARNINGS FROM THE REAL TEST
+None -- all 9 batches validated cleanly, 0 fallbacks.
+
+GIT STATUS
+Modified (tracked, carried over from earlier Step 2 work, untouched this
+session): .env.example, .gitignore, app.py, rag.py, webapp/index.html
+New untracked: llm_normalize.py, eval/llm_normalization_step_report.json/.txt
+docs/ and converted/ remain fully gitignored; the one inspection sample file
+added there has no effect on git or on the live indexed documents.
+
+CONFIRMATIONS
+- Chroma was not touched in any way (no collection access at all, not even
+  read-only, during this step).
+- No full eval/run_eval.py was run.
+- No OCR was implemented; nothing was downloaded or installed.
+
+NEXT STEP PROPOSAL (OCR -- not implemented now, per your instruction)
+Once this LLM-assisted normalization layer is reviewed and considered
+stable, propose OCR as its own separate phase:
+  1. Scanned-PDF detection is already implemented (ocr_required /
+     low_text_density_possible_scanned_pdf thresholds, from Step 2).
+  2. Local OCR tool inspection was already done in Step 2 -- nothing found
+     (no tesseract/pytesseract/pdf2image/ocrmypdf/poppler anywhere on this
+     system).
+  3. A concrete lightest Windows-friendly setup (~100-150MB: Tesseract-OCR +
+     pytesseract + pdf2image + Poppler) will only be proposed for your
+     explicit approval at that time -- nothing installed without asking.
+
+Waiting for your review before any Chroma migration, full eval, or OCR work.

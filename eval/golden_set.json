@@ -1,0 +1,242 @@
+{
+  "_meta": {
+    "description": "Golden evaluation set for baseline RAG benchmarking (Step 1). Grounded in converted/determaind.md (Robert Sapolsky, 'Determined') and docs/cosmeticorexia_fa.txt. Conceptual items target the known failure pattern (chunking destroys chapter/section structure). expected_keywords are matched as case-insensitive substrings against retrieved chunk text as an approximate relevance signal, since the current pipeline stores no chapter/section metadata.",
+    "document_filenames": {
+      "determaind": "determaind.txt",
+      "cosmeticorexia": "cosmeticorexia_fa.txt"
+    },
+    "created_for": "Step 1 baseline benchmark, before any pipeline changes"
+  },
+  "items": [
+    {
+      "id": "turtles_all_the_way_down",
+      "category": "conceptual",
+      "question_fa": "منظور نویسنده از عبارت «لاک‌پشت‌ها تا آخر روی هم سوار شده‌اند» (turtles all the way down) در فصل اول چیست؟",
+      "query_en": "what does the 'turtles all the way down' metaphor mean in the book",
+      "expected_answer_fa": "نویسنده از این تمثیل قدیمی استفاده می‌کند تا بگوید رفتار انسان را می‌توان تا بی‌نهایت به علت‌های پیشین آن (لاک‌پشت‌های زیرین) ردیابی کرد، و برخلاف تصور رایج، در پایین این زنجیره هیچ «لاک‌پشت معلق در هوا» (یعنی عاملی غیرعلّی یا اختیار آزاد) وجود ندارد؛ واقعاً تا آخر همه‌چیز لاک‌پشت است.",
+      "expected_chapter_or_section": "Chapter 1: Turtles All the Way Down",
+      "expected_keywords": ["turtles", "floating in the air", "turtles can't float", "ridiculous and nonsensical"],
+      "document_id": "34038160b1a44b129f8f3c05cccd07fe",
+      "filename": "determaind.txt",
+      "notes": "Core thesis metaphor of the whole book, stated explicitly in chapter 1. Fixed-size chunking risks splitting the setup (the old-woman/turtle anecdote) from the punchline (no floating turtle)."
+    },
+    {
+      "id": "neuron_that_started_process",
+      "category": "conceptual",
+      "question_fa": "نویسنده برای رد کردن اختیار آزاد چه چالشی درباره پیدا کردن یک نورون مطرح می‌کند؟",
+      "query_en": "find the neuron that started this process challenge to free will",
+      "expected_answer_fa": "نویسنده می‌خواهد طرفداران اختیار آزاد نورونی را پیدا کنند که جنبش عصبی‌اش بدون هیچ علت قبلی (نه نورون قبلی، نه خستگی، گرسنگی، ژن‌ها، دوران جنینی، تاریخ یا فرهنگ) رخ داده باشد؛ او معتقد است چنین نورونی هرگز پیدا نمی‌شود و همین، نشانه نبود اختیار آزاد است.",
+      "expected_chapter_or_section": "Chapter 1: Turtles All the Way Down -> Ground Rules and Definitions -> What Do I Mean by Free Will?",
+      "expected_keywords": ["find me the neuron", "action potential", "causeless cause", "started this process"],
+      "document_id": "34038160b1a44b129f8f3c05cccd07fe",
+      "filename": "determaind.txt",
+      "notes": "Same chapter/section as the turtles metaphor; tests whether retrieval finds this specific sub-passage rather than only the more famous turtles quote."
+    },
+    {
+      "id": "final_three_minutes_metaphor",
+      "category": "conceptual",
+      "question_fa": "استعاره «سه دقیقه پایانی یک فیلم» (the final three minutes of a movie) در فصل دوم به چه معناست؟",
+      "query_en": "the final three minutes of a movie metaphor meaning",
+      "expected_answer_fa": "نویسنده با این استعاره اشاره می‌کند که آگاهی از قصد یا تصمیم درست پیش از انجام یک رفتار (مثل سه دقیقه پایانی فیلم) تنها بخش آخر یک زنجیره علّی بسیار طولانی‌تر است؛ تمرکز بر همین لحظه آخر (مثل آزمایش‌های لیبت) باعث می‌شود کل فیلمی که پیش از آن در حال پخش بوده نادیده گرفته شود.",
+      "expected_chapter_or_section": "Chapter 2: The Final Three Minutes of a Movie",
+      "expected_keywords": ["Final Three Minutes", "Libet", "readiness potential", "Three Hundred Milliseconds"],
+      "document_id": "34038160b1a44b129f8f3c05cccd07fe",
+      "filename": "determaind.txt",
+      "notes": "Chapter title metaphor itself; previously reported as a failing conceptual question."
+    },
+    {
+      "id": "free_wont_veto",
+      "category": "conceptual",
+      "question_fa": "منظور از «اراده‌ی نه‌گفتن» (Free Won't) و قدرت وتو در کتاب چیست؟",
+      "query_en": "free won't the power to veto meaning",
+      "expected_answer_fa": "free won't به این ایده اشاره دارد که حتی اگر اختیار آزاد برای شروع یک رفتار نداشته باشیم، ممکن است بتوانیم در آخرین لحظه پیش از انجام آن رفتار، آن را وتو یا متوقف کنیم؛ اما نویسنده نتیجه می‌گیرد که این توانایی وتو هم خودش از فعالیت نورون‌هایی ناشی می‌شود که تحت تأثیر عوامل زیستی پیشین قرار دارند، پس free won't هم به همان اندازه free will مشکل‌دار است.",
+      "expected_chapter_or_section": "Chapter 2: The Final Three Minutes of a Movie -> Free Won't: The Power to Veto",
+      "expected_keywords": ["Free Won", "veto", "slam our foot on the brake", "neither free-will nor free-won't"],
+      "document_id": "34038160b1a44b129f8f3c05cccd07fe",
+      "filename": "determaind.txt",
+      "notes": "Reported failing question; named subsection inside chapter 2."
+    },
+    {
+      "id": "intent_seconds_minutes",
+      "category": "conceptual",
+      "question_fa": "طبق فصل سوم، نیت ما در عرض ثانیه‌ها تا دقیقه‌ها پیش از یک تصمیم چگونه شکل می‌گیرد؟",
+      "query_en": "intent formed seconds to minutes before, sensory disgust insula",
+      "expected_answer_fa": "در این بازه، اطلاعات حسی ناخودآگاه مانند بوی نامطبوع، زیبایی چهره، یا حس تنفر اخلاقی (که به ناحیه اینسولا در مغز مرتبط است) می‌توانند قضاوت‌های اخلاقی و قصد ما را تغییر دهند، بدون آنکه خودمان متوجه این تأثیر باشیم.",
+      "expected_chapter_or_section": "Chapter 3: Where Does Intent Come From? -> Seconds to Minutes Before",
+      "expected_keywords": ["Seconds to Minutes Before", "insula", "disgust", "sensory"],
+      "document_id": "34038160b1a44b129f8f3c05cccd07fe",
+      "filename": "determaind.txt",
+      "notes": "One layer of the multi-layer 'intent' chapter; tests fine-grained subsection retrieval."
+    },
+    {
+      "id": "intent_hormones_days",
+      "category": "conceptual",
+      "question_fa": "هورمون‌ها در عرض دقیقه‌ها تا روزها چگونه روی نیت و تصمیم‌گیری اثر می‌گذارند؟",
+      "query_en": "testosterone oxytocin glucocorticoids minutes to days before decision",
+      "expected_answer_fa": "نویسنده توضیح می‌دهد که تستوسترون می‌تواند پرخاشگری و ریسک‌پذیری را افزایش دهد، اکسی‌توسین و وازوپرسین رفتار اجتماعی‌تر اما فقط نسبت به «گروه خود» را تقویت می‌کنند، و گلوکوکورتیکوئیدهای ناشی از استرس می‌توانند تصمیم‌ها را تکانشی‌تر و کم‌همدلانه‌تر کنند؛ همه این‌ها بدون آگاهی فرد رخ می‌دهند.",
+      "expected_chapter_or_section": "Chapter 3: Where Does Intent Come From? -> Minutes to Days Before",
+      "expected_keywords": ["testosterone", "oxytocin", "glucocorticoids", "Minutes to Days Before"],
+      "document_id": "34038160b1a44b129f8f3c05cccd07fe",
+      "filename": "determaind.txt",
+      "notes": "Another subsection of chapter 3; tests retrieval depth beyond the first 1-2 hits."
+    },
+    {
+      "id": "intent_layers_full_chain",
+      "category": "conceptual",
+      "question_fa": "نویسنده چگونه نشان می‌دهد که نیت ما لایه به لایه از ثانیه‌ها تا ژن‌ها، فرهنگ و حتی تکامل شکل گرفته است؟",
+      "query_en": "intent shaped from seconds to minutes, hormones, adolescence, childhood, womb, genes, culture, evolution layers",
+      "expected_answer_fa": "نویسنده در فصل سوم لایه به لایه عقب می‌رود: نیت ابتدا توسط محرک‌های حسی در ثانیه‌ها تا دقیقه‌ها، سپس هورمون‌ها در روزها، سپس تجربه‌های نوجوانی و کودکی و دوران جنینی، سپس ژن‌ها، سپس قرن‌ها تاریخ و فرهنگ، و در نهایت تکامل شکل می‌گیرد؛ نتیجه این است که هیچ نقطه شروع مستقل و بدون‌علتی برای نیت پیدا نمی‌شود.",
+      "expected_chapter_or_section": "Chapter 3: Where Does Intent Come From? (full chapter span)",
+      "expected_keywords": ["Seconds to Minutes Before", "Weeks to Years Before", "Back to Adolescence", "Genes", "Evolution"],
+      "document_id": "34038160b1a44b129f8f3c05cccd07fe",
+      "filename": "determaind.txt",
+      "notes": "Broad conceptual question spanning ~8 subsections; a single fixed-k retrieval is unlikely to cover the whole chain. Good test for multi-query/wider top_k in later steps."
+    },
+    {
+      "id": "chaos_vs_unpredictability",
+      "category": "conceptual",
+      "question_fa": "طبق فصل آشوب (A Primer on Chaos)، تفاوت بین آشوب (chaos) واقعی و صِرف غیرقابل‌پیش‌بینی بودن چیست؟",
+      "query_en": "difference between chaos and mere unpredictability, Lorenz, sensitive dependence on initial conditions",
+      "expected_answer_fa": "آشوب در این کتاب به معنای سامانه‌های غیرخطی با وابستگی حساس به شرایط اولیه است (مثل کشف لورنز)، که در آن تفاوت‌های بسیار کوچک در نقطه شروع می‌توانند با گذر زمان به‌طور نمایی بزرگ شوند؛ این با غیرقابل‌پیش‌بینی بودن ساده فرق دارد، زیرا آشوب همچنان کاملاً دترمینیستی است و فقط از نظر عملی غیرقابل پیش‌بینی می‌شود، نه از نظر علّی نامعین.",
+      "expected_chapter_or_section": "Chapter 5: A Primer on Chaos",
+      "expected_keywords": ["Lorenz", "sensitive dependence on initial conditions", "nonlinear", "butterfly effect"],
+      "document_id": "34038160b1a44b129f8f3c05cccd07fe",
+      "filename": "determaind.txt",
+      "notes": "Listed failure pattern item; chaos theory chapter explaining deterministic-but-unpredictable systems."
+    },
+    {
+      "id": "quantum_randomness_vs_freedom",
+      "category": "conceptual",
+      "question_fa": "چرا نویسنده تصادفی بودن کوانتومی (quantum indeterminacy) را دلیل قانع‌کننده‌ای برای اختیار آزاد نمی‌داند؟",
+      "query_en": "quantum indeterminacy not a basis for free will, three problems",
+      "expected_answer_fa": "نویسنده می‌گوید حتی اگر دنیای زیراتمی واقعاً نامعین باشد، این تصادفی‌بودن کوانتومی معمولاً در سطح مغز و رفتار «بالا نمی‌آید» (bubbling up) و در نهایت تصادف محض است، نه انتخاب آگاهانه؛ پس صرف وجود تصادف کوانتومی به معنای وجود اراده آزاد نیست.",
+      "expected_chapter_or_section": "Chapter 9: A Primer on Quantum Indeterminacy / Chapter 10: Is Your Free Will Random?",
+      "expected_keywords": ["quantum indeterminacy", "Bubbling Up", "Eccles", "random"],
+      "document_id": "34038160b1a44b129f8f3c05cccd07fe",
+      "filename": "determaind.txt",
+      "notes": "Listed failure pattern item; spans two adjacent chapters."
+    },
+    {
+      "id": "emergent_complexity_vs_free_will",
+      "category": "conceptual",
+      "question_fa": "چرا پیچیدگی نوظهور (emergent complexity) نمی‌تواند پایه‌ای برای اختیار آزاد باشد؟",
+      "query_en": "emergent complexity cannot ground free will, single neuron, List quote",
+      "expected_answer_fa": "برخی فیلسوفان می‌گویند هرچند یک نورون به‌تنهایی نمی‌تواند اختیار آزاد داشته باشد، اما مجموعه نورون‌ها به‌صورت نوظهور می‌توانند؛ نویسنده این استدلال را نمی‌پذیرد و می‌گوید پیچیدگی نوظهور (مثل آبشار یا دلتای رودخانه) هرچند الگوهای جدید و پیش‌بینی‌ناپذیری تولید می‌کند، همچنان کاملاً دترمینیستی است و هیچ شکافی برای اراده آزاد ایجاد نمی‌کند.",
+      "expected_chapter_or_section": "Chapter 7: A Primer on Emergent Complexity / Chapter 8: Does Your Free Will Just Emerge?",
+      "expected_keywords": ["emergent complexity", "emergent properties", "List", "waterfall"],
+      "document_id": "34038160b1a44b129f8f3c05cccd07fe",
+      "filename": "determaind.txt",
+      "notes": "Listed failure pattern item; spans two adjacent chapters, parallel structure to the chaos/quantum pair."
+    },
+    {
+      "id": "punishment_vs_public_safety",
+      "category": "conceptual",
+      "question_fa": "نویسنده به‌جای تنبیه انتقام‌جویانه، چه مدلی برای حفظ امنیت عمومی پیشنهاد می‌کند؟",
+      "query_en": "quarantine model instead of retributive punishment, public safety",
+      "expected_answer_fa": "نویسنده مدل «قرنطینه» (quarantine) را پیشنهاد می‌کند: همان‌طور که افراد بیمار یا خطرناک برای دیگران بدون قصد انتقام از جامعه جدا یا محدود می‌شوند، باید با مجرمان هم به همین شکل و فقط برای حفظ امنیت عمومی رفتار کرد، نه برای مجازات یا انتقام اخلاقی.",
+      "expected_chapter_or_section": "Chapter 14: The Joy of Punishment -> quarantine model",
+      "expected_keywords": ["quarantine", "deterrent value", "public safety", "leper colonies"],
+      "document_id": "34038160b1a44b129f8f3c05cccd07fe",
+      "filename": "determaind.txt",
+      "notes": "Listed failure pattern item (retribution vs public safety); the 'quarantine' framing is the book's specific answer."
+    },
+    {
+      "id": "change_under_determinism",
+      "category": "conceptual",
+      "question_fa": "اگر اختیار آزاد وجود ندارد، طبق این کتاب رفتار انسان چگونه تغییر می‌کند؟",
+      "query_en": "how does behavior change if there is no free will",
+      "expected_answer_fa": "نویسنده می‌گوید ما ذهن خودمان را عوض نمی‌کنیم، بلکه ذهن ما توسط شرایط بیرونی و زیستی پیشین تغییر می‌یابد؛ این تغییر با همان مکانیسم‌های مولکولی و ژنی‌ای رخ می‌دهد که در موجودات بسیار ساده‌تر هم دیده می‌شود، و همین موضوع به‌جای ناامیدکننده بودن، می‌تواند زمینه‌ای برای امیدواری باشد.",
+      "expected_chapter_or_section": "Chapter 12: The Ancient Gears within Us: How Does Change Happen?",
+      "expected_keywords": ["we don't change our minds", "changed by circumstances", "sea slug", "Ancient Gears"],
+      "document_id": "34038160b1a44b129f8f3c05cccd07fe",
+      "filename": "determaind.txt",
+      "notes": "Listed failure pattern item; chapter title itself poses this exact question."
+    },
+    {
+      "id": "poverty_success_deservedness",
+      "category": "conceptual",
+      "question_fa": "نویسنده چه نقدی به ایده‌ی «لایق بودن» (deservedness) برای فقر یا موفقیت در زندگی دارد؟",
+      "query_en": "deservedness poverty success criticism, Dennett runner metaphor",
+      "expected_answer_fa": "نویسنده با نقد یک تمثیل از دنیل دنت (دونده‌ای که از انتهای صف شروع می‌کند ولی اگر واقعاً لایق برنده شدن باشد، فرصت جبران پیدا می‌کند) می‌گوید این نگاه تقریباً معادل این باور است که خدا فقر را برای تنبیه گناهکاران خلق کرده؛ او معتقد است موفقیت یا فقر افراد عمدتاً محصول عوامل زیستی، ژنتیکی و محیطی خارج از کنترل آن‌هاست، نه میزان «لایق بودن» آن‌ها.",
+      "expected_chapter_or_section": "Chapter 1 (Dennett runner metaphor) / Chapter 15: If You Die Poor",
+      "expected_keywords": ["DESERVE winning", "Dennett", "poverty", "deservedness"],
+      "document_id": "34038160b1a44b129f8f3c05cccd07fe",
+      "filename": "determaind.txt",
+      "notes": "Listed failure pattern item; the sharpest quote is in chapter 1 but the theme is developed fully in chapter 15."
+    },
+    {
+      "id": "phineas_gage_direct",
+      "category": "direct",
+      "question_fa": "ماجرای فینیاس گیج (Phineas Gage) که در کتاب آمده چیست؟",
+      "query_en": "Phineas Gage accident frontal cortex story",
+      "expected_answer_fa": "فینیاس گیج کارگری بود که در سال ۱۸۴۸ در یک انفجار، میله‌ای آهنی از مغزش (بخش زیادی از کورتکس پیشانی‌اش) عبور کرد؛ پس از این حادثه شخصیتش به‌کلی تغییر کرد و فردی تکانشی، گزافه‌گو و غیرقابل‌اعتماد شد، که نویسنده آن را نمونه‌ای از تأثیر مستقیم زیست‌شناسی مغز بر شخصیت و رفتار می‌داند.",
+      "expected_chapter_or_section": "Chapter 1: Turtles All the Way Down",
+      "expected_keywords": ["Phineas Gage", "frontal cortex", "1848", "dynamite"],
+      "document_id": "34038160b1a44b129f8f3c05cccd07fe",
+      "filename": "determaind.txt",
+      "notes": "Direct factual/named-entity question, expected to already work well; baseline contrast against the conceptual items above."
+    },
+    {
+      "id": "laplace_demon_direct",
+      "category": "direct",
+      "question_fa": "«شیطان لاپلاس» (Laplace's demon) در کتاب به چه معناست؟",
+      "query_en": "Laplace's demon definition determinism",
+      "expected_answer_fa": "شیطان لاپلاس موجودی فرضی است که اگر موقعیت و سرعت تمام ذرات جهان را در یک لحظه بداند، می‌تواند تمام گذشته و آینده جهان را دقیقاً پیش‌بینی کند؛ این مفهوم نمادی از دیدگاه کلاسیک دترمینیستی است که نویسنده در تعریف دترمینیسم به آن اشاره می‌کند.",
+      "expected_chapter_or_section": "Chapter 1: Turtles All the Way Down -> What Do I Mean by Determinism?",
+      "expected_keywords": ["Laplace", "demon", "every particle", "determinism"],
+      "document_id": "34038160b1a44b129f8f3c05cccd07fe",
+      "filename": "determaind.txt",
+      "notes": "Direct factual/named-entity question, expected to already work well."
+    },
+    {
+      "id": "libet_experiment_direct",
+      "category": "direct",
+      "question_fa": "آزمایش لیبت (Libet) درباره آگاهی از تصمیم چه چیزی را نشان داد؟",
+      "query_en": "Libet experiment readiness potential conscious intent timing",
+      "expected_answer_fa": "آزمایش‌های لیبت نشان دادند که فعالیت مغزی مربوط به آماده‌شدن برای یک حرکت (readiness potential) پیش از آنکه فرد آگاهانه احساس کند قصد انجام آن حرکت را دارد، شروع می‌شود؛ این یافته به این معناست که تصمیم در سطح ناخودآگاه مغز شکل می‌گیرد، نه با اراده آگاهانه.",
+      "expected_chapter_or_section": "Chapter 2: The Final Three Minutes of a Movie -> Three Hundred Milliseconds",
+      "expected_keywords": ["Libet", "readiness potential", "conscious", "Three Hundred Milliseconds"],
+      "document_id": "34038160b1a44b129f8f3c05cccd07fe",
+      "filename": "determaind.txt",
+      "notes": "Direct factual question, expected to already work well; also overlaps with the free-won't conceptual item for cross-check."
+    },
+    {
+      "id": "cosmeticorexia_definition",
+      "category": "direct",
+      "question_fa": "اصطلاح «کاسمتیکورکسیا» (cosmeticorexia) به چه معناست و بیشتر در چه گروه سنی دیده می‌شود؟",
+      "query_en": "cosmeticorexia definition age group social media skincare obsession",
+      "expected_answer_fa": "کاسمتیکورکسیا اصطلاحی است که برای توصیف وسواس فکری در روتین‌های مراقبت از پوست و آرایش به‌کار می‌رود که اغلب با ترندهای شبکه‌های اجتماعی ایجاد می‌شود و بیشتر در نوجوانان و پیش‌نوجوانان، تقریباً بین ۹ تا ۱۷ سال، دیده می‌شود.",
+      "expected_chapter_or_section": "n/a (single Persian document, no chapter structure)",
+      "expected_keywords": ["کاسمتیکورکسیا", "روتین", "نوجوانان", "۹ تا ۱۷"],
+      "document_id": "a5ee20ddba014770843204d0b12dffe7",
+      "filename": "cosmeticorexia_fa.txt",
+      "notes": "Native-Persian document baseline: tests retrieval/answer quality without any cross-lingual gap, and that this document's chunks don't get crowded out by the much larger determaind.txt collection."
+    },
+    {
+      "id": "true_negative_keto_diet",
+      "category": "true_negative",
+      "question_fa": "کتاب درباره فواید رژیم غذایی کتوژنیک برای کاهش وزن چه می‌گوید؟",
+      "query_en": "ketogenic diet weight loss benefits",
+      "expected_answer_fa": "اطلاعات کافی در اسناد موجود برای پاسخ به این سؤال وجود ندارد.",
+      "expected_chapter_or_section": "n/a - not covered by either document",
+      "expected_keywords": ["ketogenic", "keto diet", "low-carb weight loss"],
+      "document_id": null,
+      "filename": null,
+      "notes": "True-negative control: topic is absent from both indexed documents. Correct behavior is a refusal with no sources; if the model answers anyway, that is a hallucination, not a false refusal.",
+      "is_true_negative": true
+    },
+    {
+      "id": "true_negative_crypto",
+      "category": "true_negative",
+      "question_fa": "نویسنده چه نظری درباره سرمایه‌گذاری در بازارهای رمزارز دارد؟",
+      "query_en": "cryptocurrency investment opinion",
+      "expected_answer_fa": "اطلاعات کافی در اسناد موجود برای پاسخ به این سؤال وجود ندارد.",
+      "expected_chapter_or_section": "n/a - not covered by either document",
+      "expected_keywords": ["cryptocurrency", "bitcoin", "crypto investment"],
+      "document_id": null,
+      "filename": null,
+      "notes": "Second true-negative control with an unrelated modern-finance topic, to reduce the chance the first true-negative item is a fluke.",
+      "is_true_negative": true
+    }
+  ]
+}
