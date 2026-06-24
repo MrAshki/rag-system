@@ -32,8 +32,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.stdout.reconfigure(encoding="utf-8")
 
-import chunker  # noqa: E402
-import ingest  # noqa: E402
+from document_pipeline import chunker, ingest  # noqa: E402
 import rag  # noqa: E402
 
 assert os.getenv("ENABLE_LLM_NORMALIZATION", "false").lower() != "true", (

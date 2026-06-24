@@ -38,8 +38,7 @@ sys.path.insert(0, os.path.join(ROOT, "eval"))
 sys.stdout.reconfigure(encoding="utf-8")
 
 import chromadb  # noqa: E402
-import chunker  # noqa: E402
-import ingest  # noqa: E402
+from document_pipeline import chunker, ingest  # noqa: E402
 import rag  # noqa: E402
 import run_eval  # noqa: E402  (eval/run_eval.py)
 

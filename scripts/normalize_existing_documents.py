@@ -18,7 +18,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.stdout.reconfigure(encoding="utf-8")
 
-import ingest  # noqa: E402
+from document_pipeline import ingest  # noqa: E402
 import rag  # noqa: E402  (read-only: only rag.list_documents() is called)
 
 DOCS_DIR = "./docs"

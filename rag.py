@@ -9,7 +9,7 @@ import ollama
 import sys
 from typing import List, Dict, Optional
 
-import chunker
+from document_pipeline import chunker
 
 sys.stdout.reconfigure(encoding="utf-8")
 load_dotenv()
@@ -29,9 +29,32 @@ def _require_env(name: str) -> str:
     return value
 
 
+def _positive_int_env(name: str, default: int) -> int:
+    """Reads an integer env var, falling back to `default` if unset/blank.
+    Fails fast (rather than silently using a wrong context size) if the value
+    is present but not a positive integer -- e.g. a typo'd OLLAMA_NUM_CTX could
+    otherwise silently truncate context without any visible error."""
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        raise RuntimeError(f"{name} must be an integer (got {raw!r}). Fix .env.")
+    if value <= 0:
+        raise RuntimeError(f"{name} must be a positive integer (got {value}). Fix .env.")
+    return value
+
+
 EMBEDDING_MODEL = _require_env("EMBEDDING_MODEL")
 OLLAMA_MODEL = _require_env("OLLAMA_MODEL")
+OLLAMA_NUM_CTX = _positive_int_env("OLLAMA_NUM_CTX", 4096)
 COLLECTION_NAME = "document_qa_collection_local"
+
+# Bump this whenever the grounding/language prompt or guards change. It is logged
+# at startup and on the health route so we can PROVE which prompt a running server
+# is actually serving (a stale server keeps the old value in memory until restart).
+ANSWER_PROMPT_VERSION = "grounding_v2"
 
 if torch.cuda.is_available():
     EMBEDDING_DEVICE = "cuda"
@@ -51,6 +74,15 @@ try:
 except Exception as e:
     print(f"Error initializing clients: {str(e)}")
     sys.exit(1)
+
+# Startup banner so a running server proves which code/prompt it loaded.
+print(
+    f"[rag] loaded module={os.path.abspath(__file__)} "
+    f"ANSWER_PROMPT_VERSION={ANSWER_PROMPT_VERSION} "
+    f"OLLAMA_MODEL={OLLAMA_MODEL} OLLAMA_NUM_CTX={OLLAMA_NUM_CTX} "
+    f"EMBEDDING_MODEL={EMBEDDING_MODEL}",
+    flush=True,
+)
 
 
 def split_text(text: str, chunk_size: int = 800, chunk_overlap: int = 150) -> List[str]:
@@ -207,6 +239,78 @@ def _citation_label(chunk: Dict) -> str:
     return " — ".join(parts)
 
 
+def _question_language(text: str) -> str:
+    """Decide the answer language from the *question itself*, never from the
+    retrieved context. Any Persian/Arabic-script character -> 'fa', otherwise 'en'.
+    This is the fix that stops an English source document from dragging a Persian
+    question's answer into English."""
+    if re.search(r"[؀-ۿ]", text or ""):
+        return "fa"
+    return "en"
+
+
+def _text_language(text: str) -> str:
+    """Majority-script of an arbitrary text (used to audit the *model's answer*,
+    not the question). Returns 'fa', 'en', or 'unknown'."""
+    fa = len(re.findall(r"[؀-ۿ]", text or ""))
+    en = len(re.findall(r"[A-Za-z]", text or ""))
+    if fa == 0 and en == 0:
+        return "unknown"
+    return "fa" if fa >= en else "en"
+
+
+# Patterns that mean "the view/opinion of <NAME>" — used only to GUARD against
+# attributing a stance to someone absent from the retrieved context.
+_ENTITY_PATTERNS = [
+    r"از\s*نظر\s+(.+?)(?:\s+(?:چیه|چیست|چی|چطور|درباره|راجع|در\s*مورد|است|هست)\b|[،؟?]|$)",
+    r"از\s*دیدگاه\s+(.+?)(?:\s+(?:چیه|چیست|چی|درباره|راجع|در\s*مورد)\b|[،؟?]|$)",
+    r"\bنظر\s+(.+?)\s+(?:درباره|راجع\s*به|در\s*مورد)\b",
+    r"به\s*گفته[ٔ‌ ]?\s*(.+?)(?:[،؟?]|\s+(?:درباره|در\s*مورد)\b|$)",
+    r"according to\s+([A-Za-z.''\- ]+?)(?:\s+(?:about|on|regarding)\b|[,?.]|$)",
+    r"what does\s+([A-Za-z.''\- ]+?)\s+(?:say|think|argue|believe|claim)\b",
+    r"([A-Z][A-Za-z.''\-]+(?:\s+[A-Z][A-Za-z.''\-]+)*)'s\s+(?:view|opinion|take|argument|position)\b",
+]
+
+_DISCLAIMER_MARKERS = [
+    "پیدا نکردم", "اشاره‌ای به", "اشاره ای به", "یافت نشد", "ذکر نشده", "نشده است",
+    "not found", "couldn't find", "could not find", "couldn’t find",
+    "does not mention", "doesn't mention", "no mention",
+]
+
+
+def _extract_asked_entity(question: str):
+    """Heuristic: if the question asks for the view/opinion of a specific named
+    person ('از نظر محمد اشکریز...', 'according to X...'), return that name; else
+    None. This never adds content — it only decides whether to RUN the guard."""
+    for pat in _ENTITY_PATTERNS:
+        m = re.search(pat, question or "", flags=re.IGNORECASE)
+        if m:
+            name = m.group(1).strip(" \t.،؟?\"'")
+            # drop trivial/topic-like captures
+            if name and len(name) >= 2 and name.lower() not in ("the book", "it", "این کتاب", "کتاب"):
+                return name
+    return None
+
+
+def _entity_in_text(entity: str, text: str) -> bool:
+    """Whether a named entity is actually present in the retrieved text. Matches the
+    full name, or its distinctive last token (surname), case-insensitively."""
+    e = (entity or "").strip().lower()
+    t = (text or "").lower()
+    if not e:
+        return False
+    if e in t:
+        return True
+    tokens = [tok for tok in re.split(r"\s+", e) if len(tok) >= 3]
+    if not tokens:
+        return False
+    return tokens[-1] in t
+
+
+def _has_disclaimer(answer: str) -> bool:
+    return any(m in (answer or "") for m in _DISCLAIMER_MARKERS)
+
+
 def generate_response(
     question: str,
     relevant_chunks: List[Dict],
@@ -227,42 +331,114 @@ def generate_response(
             f"[منبع: {_citation_label(c)}]\n{c['text']}" for c in relevant_chunks
         )
 
+        lang = _question_language(question)
+        if lang == "fa":
+            language_directive = (
+                "زبان سؤال کاربر فارسی است. کل پاسخ را فقط و فقط به فارسیِ روان و طبیعی "
+                "بنویس، حتی اگر متنِ بازیابی‌شده انگلیسی باشد. به هیچ زبان دیگری پاسخ نده."
+            )
+            entity_template_hint = (
+                "برای پاسخِ فارسی دقیقاً از همین قالب استفاده کن و جای‌نگه‌دارها را پر کن: "
+                "«در بخش‌های بازیابی‌شده، اشاره‌ای به [نام موجودیت] پیدا نکردم؛ اما متن "
+                "درباره [موضوع] چنین می‌گوید: ...»."
+            )
+        else:
+            language_directive = (
+                "The user's question is in English. Write your entire answer in English, "
+                "even if the retrieved context is in another language."
+            )
+            entity_template_hint = (
+                "For an English answer use this shape, filling in the placeholders: "
+                "\"I couldn't find any mention of [entity] in the retrieved passages, but "
+                "the text does say the following about [topic]: ...\"."
+            )
+
         scope_instruction = (
             f"The user has restricted the scope to a single document: \"{selected_source}\". "
             "Only use context chunks from that document. Ignore any general knowledge you may "
-            f"have about the topic. If the context is insufficient, reply with exactly this "
-            f"sentence and nothing else: \"{no_info_message}\""
+            "have about the topic. "
             if scope == "selected"
-            else
-            f"If the context is insufficient, reply with exactly this sentence and nothing else: "
-            f"\"{no_info_message}\""
+            else ""
         )
 
-        response = ollama.chat(
-            model=OLLAMA_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an assistant for question-answering tasks. Answer only based on "
-                        "the retrieved context below. Do not add facts that are not present in the "
-                        "retrieved context. You may use ordinary reading comprehension, such as "
-                        "recognizing that a term in one passage and its translation/equivalent in "
-                        "another retrieved passage refer to the same thing, but do not introduce "
-                        "any claim that is not directly supported by the retrieved context. "
-                        + scope_instruction + " "
-                        "Always answer in the same language as the question. Keep the answer to "
-                        "three sentences maximum."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": f"Context:\n{context}\n\nQuestion: {question}",
-                },
-            ],
-            options={"temperature": 0.0, "num_ctx": 4096},
+        system_content = (
+            "You are a careful, grounded question-answering assistant. Answer ONLY from the "
+            "retrieved context provided below.\n\n"
+            "ANSWER LANGUAGE (highest priority): " + language_directive + " The answer "
+            "language is decided solely by the language of the question, never by the "
+            "language of the retrieved context.\n\n"
+            "GROUNDING: Use only information that is actually present in the retrieved "
+            "context. Do not use outside/general knowledge and do not invent facts. You may "
+            "use basic reading comprehension (for example, recognizing that a term and its "
+            "translation refer to the same thing), but never introduce a claim that is not "
+            "supported by the retrieved context. Never attribute a view or statement to a "
+            "person who is not actually named in the retrieved context.\n\n"
+            "DECISION PROCEDURE (apply in order, then stop):\n"
+            "1) If the retrieved context does not address the question at all, reply with "
+            "exactly this sentence and nothing else: \"" + no_info_message + "\"\n"
+            "2) Otherwise, check whether the QUESTION ITSELF names a specific person, author, "
+            "or work. Only if it does AND that exact name (or an obvious equivalent) is NOT "
+            "present in the retrieved context: begin by stating that this name was not found, "
+            "then give the grounded information about the general topic instead. Do not "
+            "attribute any view to the missing person. " + entity_template_hint + "\n"
+            "3) In EVERY OTHER case, simply answer the question directly and naturally from "
+            "the context. Do NOT add any preamble about whether a name or entity is or isn't "
+            "mentioned, and never invent a name just to say it was not found. The disclaimer "
+            "in step 2 is allowed ONLY when the user's own question contained a specific "
+            "personal name that is missing from the context. For example, for a general "
+            "question such as \"what does the book say about X?\" / «کتاب درباره X چه می‌گوید؟», "
+            "answer directly about X and do NOT include any sentence about a name not being "
+            "found.\n\n"
+            "STYLE: Be natural, clear, and useful, and match the depth of the answer to the "
+            "question. Do not be creative, loose, or speculative. " + scope_instruction
+        ).strip()
+
+        lang_reminder = (
+            "یادآوری: پاسخ را فقط به فارسی بنویس."
+            if lang == "fa"
+            else "Reminder: write the answer in English."
         )
-        answer = response["message"]["content"].strip()
+
+        user_content = f"Context:\n{context}\n\nQuestion: {question}\n\n{lang_reminder}"
+
+        def _chat(system: str) -> str:
+            resp = ollama.chat(
+                model=OLLAMA_MODEL,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_content},
+                ],
+                options={"temperature": 0.0, "num_ctx": OLLAMA_NUM_CTX},
+            )
+            return resp["message"]["content"].strip()
+
+        answer = _chat(system_content)
+
+        # --- Deterministic guard 1: never attribute a view to a named person who is
+        # absent from the retrieved context. Triggers ONLY when the question asks for
+        # a specific person's view AND that name is not in the context AND the model
+        # did not already disclaim. The fix is a forced regeneration (still grounded in
+        # the same chunks) -- it invents no content. ----------------------------------
+        asked_entity = _extract_asked_entity(question)
+        if asked_entity and not _entity_in_text(asked_entity, context) and not _has_disclaimer(answer):
+            forced = system_content + (
+                f"\n\nCRITICAL OVERRIDE: The name \"{asked_entity}\" does NOT appear anywhere "
+                f"in the retrieved context above. You must NOT attribute any view, opinion, or "
+                f"statement to \"{asked_entity}\". Begin your answer by clearly stating that "
+                f"\"{asked_entity}\" was not found in the retrieved text, then explain ONLY the "
+                f"grounded general topic from the context."
+            )
+            answer = _chat(forced)
+
+        # --- Deterministic guard 2: a Persian question must get a Persian answer, even
+        # if the retrieved context is English. Regenerate once if the model slipped. ---
+        if lang == "fa" and _text_language(answer) == "en":
+            forced_lang = system_content + (
+                "\n\nCRITICAL OVERRIDE: Write the ENTIRE answer in fluent Persian (فارسی) only. "
+                "Do not output any English sentences."
+            )
+            answer = _chat(forced_lang)
+
         if answer == no_info_message:
             sources = []
         else:

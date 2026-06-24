@@ -27,6 +27,11 @@ app_data.sqlite3
 docs/*
 !docs/.gitkeep
 
+# Manual test inputs — copied book/test files kept local for manual UI testing
+# (copyrighted source, not for distribution). Keep the folder, ignore its contents.
+manual_test_inputs/*
+!manual_test_inputs/.gitkeep
+
 # Book source materials (copyrighted, not for distribution)
 books/
 converted/

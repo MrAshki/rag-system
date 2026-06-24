@@ -8,8 +8,7 @@ from flask.json.provider import DefaultJSONProvider
 import rag
 import db
 import auth
-import ingest
-import chunker
+from document_pipeline import ingest, chunker
 import payments
 from ratelimit import rate_limited
 
@@ -56,6 +55,20 @@ app.config["SESSION_COOKIE_SECURE"] = os.getenv("PUBLIC_BASE_URL", "").startswit
 # ---------------------------------------------------------------------------
 # Static pages
 # ---------------------------------------------------------------------------
+
+@app.route("/api/health")
+def health():
+    """Unauthenticated, non-sensitive: lets us confirm which answer-prompt version a
+    running server actually loaded (a stale server keeps old code until restarted)."""
+    return jsonify({
+        "status": "ok",
+        "answer_prompt_version": rag.ANSWER_PROMPT_VERSION,
+        "ollama_model": rag.OLLAMA_MODEL,
+        "ollama_num_ctx": rag.OLLAMA_NUM_CTX,
+        "embedding_model": rag.EMBEDDING_MODEL,
+        "indexed_chunks": rag.collection.count(),
+    })
+
 
 @app.route("/")
 def index():
