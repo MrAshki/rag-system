@@ -66,6 +66,10 @@ def health():
         "ollama_model": rag.OLLAMA_MODEL,
         "ollama_num_ctx": rag.OLLAMA_NUM_CTX,
         "embedding_model": rag.EMBEDDING_MODEL,
+        "reranker_enabled": rag.ENABLE_RERANKER,
+        "reranker_model": rag.RERANKER_MODEL,
+        "retrieve_k": rag.RETRIEVE_K,
+        "rerank_top_k": rag.RERANK_TOP_K,
         "indexed_chunks": rag.collection.count(),
     })
 
@@ -297,28 +301,18 @@ def ask():
     if scope == "selected" and not document_id:
         return jsonify({"error": "برای این حالت باید یک سند انتخاب شود"}), 400
 
-    doc_filter = document_id if scope == "selected" else None
-    sub_questions = rag.split_questions(question)
-
-    if len(sub_questions) <= 1:
-        chunks = rag.query_documents(question, document_id=doc_filter, user_id=user["id"])
-        result = rag.generate_response(question, chunks, scope=scope, selected_source=document_name)
-        return jsonify(result)
-
-    # Mixed multi-question input: answer each part independently so one
-    # unanswerable part doesn't cause a full refusal of the whole input.
-    answer_lines = []
-    all_sources = []
-    for i, part in enumerate(sub_questions, start=1):
-        chunks = rag.query_documents(part, document_id=doc_filter, user_id=user["id"])
-        sub = rag.generate_response(part, chunks, scope=scope, selected_source=document_name)
-        line = f"{fa_number(i)}. {sub['answer']}"
-        if sub["sources"]:
-            line += "\nمنبع: " + "، ".join(sub["sources"])
-        answer_lines.append(line)
-        all_sources.extend(sub["sources"])
-
-    return jsonify({"answer": "\n\n".join(answer_lines), "sources": all_sources})
+    # The full pipeline (understand the message -> per-question retrieve -> grounded
+    # answer -> assemble) lives in rag.answer_request, so the web path and the offline
+    # quality tests exercise exactly the same code. Semantic query understanding
+    # replaced the old punctuation-based split_questions().
+    result = rag.answer_request(
+        question,
+        scope=scope,
+        document_id=document_id,
+        user_id=user["id"],
+        selected_source=document_name,
+    )
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------

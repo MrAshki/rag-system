@@ -41,6 +41,11 @@ CHAPTER_WORD_RE = re.compile(
 NUMBERED_MARKER_RE = re.compile(r"^([0-9۰-۹]+)[\.\)]\s+(\S.*)$")
 BULLET_MARKER_RE = re.compile(r"^([-*•])\s+(.*)$")
 
+# Standalone boilerplate lines from ebook/PDF exports: a line that is entirely a
+# bracketed note -- "[]", "[Cover for ...]", "[Image: ...]". These are cover/image
+# alt-text placeholders, not real content, and must never become a title or heading.
+BRACKET_ONLY_RE = re.compile(r"^\s*\[[^\]]*\]\s*$")
+
 TRAILING_PUNCT_RE = re.compile(r"[.!۔:,،؛]\s*$")  # "?"/"؟" deliberately excluded: question-style headings are common
 MAX_HEADING_LEN = 90
 MAX_TITLE_LEN = 80
@@ -61,6 +66,14 @@ _DOCX_LIST_PREFIXES = ("list bullet", "list number", "list paragraph")
 
 def _has_latin_letters(s: str) -> bool:
     return bool(re.search(r"[A-Za-z]", s))
+
+
+def _is_boilerplate_line(line: str) -> bool:
+    """Standalone junk lines that should be dropped before structure detection:
+    bracket-only placeholders ("[]", "[Cover ...]", "[Image: ...]"). Inline
+    references like a trailing "[1]" inside a sentence are NOT matched (this only
+    fires when the whole line is a single bracketed note)."""
+    return bool(BRACKET_ONLY_RE.match(line or ""))
 
 
 def _generic_heading_candidate(line: str) -> bool:
@@ -85,9 +98,15 @@ def _generic_heading_candidate(line: str) -> bool:
 def _is_title_candidate(line: str) -> bool:
     """Positional-only check (first block of a document): short, standalone,
     no terminal punctuation. Deliberately language-agnostic (no
-    capitalization requirement) so Persian-only titles are detected too."""
+    capitalization requirement) so Persian-only titles are detected too.
+    Rejects boilerplate placeholders ("[]") and lines with no word characters
+    so junk like "[]" is never promoted to the document title."""
     line = line.strip()
-    return bool(line) and len(line) <= MAX_TITLE_LEN and not TRAILING_PUNCT_RE.search(line)
+    if not line or len(line) > MAX_TITLE_LEN or TRAILING_PUNCT_RE.search(line):
+        return False
+    if _is_boilerplate_line(line) or not re.search(r"\w", line):
+        return False
+    return True
 
 
 def _classify_marker_line(line: str) -> Tuple[Optional[str], Optional[re.Match]]:
@@ -122,8 +141,18 @@ def _classify_heading_line(line: str) -> Tuple[Optional[int], Optional[str]]:
     line = line.strip()
     if not line:
         return None, None
-    if CHAPTER_WORD_RE.match(line):
-        return 2, "strong"
+    # A real "Chapter 3"/"فصل ۲"/"Part II" heading is short, unpunctuated, and its
+    # remainder (after the number) is empty or a Title -- not lowercase prose. Without
+    # these guards, CHAPTER_WORD_RE also matched ordinary paragraphs that merely start
+    # with one of those words ("Part of the neglect reflected ...", "Chapter 3 covered
+    # how ...", including the ~80-char first line of a wrapped PDF paragraph) and
+    # promoted body text to a section heading.
+    m_chap = CHAPTER_WORD_RE.match(line)
+    if m_chap and len(line) <= MAX_HEADING_LEN and not TRAILING_PUNCT_RE.search(line):
+        rest = (m_chap.group(3) or "").strip()
+        prose_continuation = bool(rest) and _has_latin_letters(rest) and rest[:1].islower()
+        if not prose_continuation:
+            return 2, "strong"
     nm = NUMBERED_MARKER_RE.match(line)
     if nm and len(line) <= MAX_HEADING_LEN and not TRAILING_PUNCT_RE.search(line):
         return 2, "strong"
@@ -341,6 +370,9 @@ def _lines_to_blocks(text: str, detect_implicit_lists: bool = True) -> List[Tupl
     where pypdf's line breaks are often just visual word-wrap artifacts that
     would otherwise misclassify ordinary wrapped paragraphs as lists."""
     raw_lines = [l.strip() for l in text.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+    # Drop standalone boilerplate (cover/image placeholders) by turning them into
+    # blank separators so they neither become content nor a heading/title.
+    raw_lines = ["" if _is_boilerplate_line(l) else l for l in raw_lines]
     entries = [(l, None) for l in raw_lines]
     return _tokenize(entries, detect_implicit_lists)
 
@@ -404,7 +436,10 @@ def normalize_docx(file_stream, force_llm_normalization: bool = False) -> Dict:
         # paragraph still gets per-line classification instead of being
         # treated as one opaque multi-line blob.
         raw = p.text.replace("\r\n", "\n").replace("\r", "\n")
-        sub_lines = [l.strip() for l in raw.split("\n") if l.strip()]
+        sub_lines = [
+            l.strip() for l in raw.split("\n")
+            if l.strip() and not _is_boilerplate_line(l.strip())
+        ]
         if not sub_lines:
             continue
         style = (p.style.name if p.style is not None else "") or ""

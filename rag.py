@@ -1,5 +1,10 @@
 import os
+# Enforce fully-local model loading: never reach out to Hugging Face at runtime.
+# (Everything is already on disk under models/; this guarantees no surprise download.)
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 import re
+import json
 import uuid
 import torch
 from dotenv import load_dotenv
@@ -54,7 +59,19 @@ COLLECTION_NAME = "document_qa_collection_local"
 # Bump this whenever the grounding/language prompt or guards change. It is logged
 # at startup and on the health route so we can PROVE which prompt a running server
 # is actually serving (a stale server keeps the old value in memory until restart).
-ANSWER_PROMPT_VERSION = "grounding_v2"
+ANSWER_PROMPT_VERSION = "rerank_v5"
+
+# Two-stage retrieval: pull a wide dense net from Chroma (bge-m3), then rerank with a
+# cross-encoder (bge-reranker-v2-m3) and keep the best few. The cross-encoder judges
+# query/chunk relevance far better than dense similarity alone -- e.g. it ranks the
+# book's actual thesis above a sub-argument the author only quotes to rebut.
+RERANKER_MODEL = os.getenv("RERANKER_MODEL", "./models/bge-reranker-v2-m3")
+# CPU by default: the 8 GB GPU already holds bge-m3 and is shared with Ollama; reranking
+# a few dozen short pairs on CPU takes a couple of seconds (latency is not a priority).
+RERANKER_DEVICE = os.getenv("RERANKER_DEVICE", "cpu")
+ENABLE_RERANKER = os.getenv("ENABLE_RERANKER", "true").strip().lower() == "true"
+RETRIEVE_K = _positive_int_env("RETRIEVE_K", 30)   # wide dense net before reranking
+RERANK_TOP_K = _positive_int_env("RERANK_TOP_K", 5)  # chunks kept for the answer
 
 if torch.cuda.is_available():
     EMBEDDING_DEVICE = "cuda"
@@ -176,11 +193,69 @@ def list_documents(user_id: int = None) -> List[Dict]:
     ]
 
 
-def split_questions(text: str) -> List[str]:
-    """Split a possibly mixed multi-question input into separate sub-questions on ؟ / ? / newlines.
-    A normal single question (one mark, at the end) still yields exactly one part."""
-    parts = re.split(r"[؟?]+|\n+", text)
-    return [p.strip() for p in parts if p.strip()]
+def understand_query(text: str) -> List[Dict]:
+    """Interpret a (possibly messy, misspelled, mis-punctuated, or multi-part) user
+    message into one or more distinct questions, each with a cleaned-up retrieval query.
+
+    This replaces the old punctuation-based split_questions(): a real user may pack
+    several questions into one message using periods instead of '؟', or write one long
+    request that should stay a single question (e.g. "...چیه؟ مفصل توضیح بده"). The local
+    model decides how many real questions there are and produces a focused search query
+    for each (fixing spelling, expanding colloquialisms like 'راجب'->'راجع به', dropping
+    filler/instruction words, and steering off ambiguous person-names toward the topic).
+
+    Returns a list of {"user_question": str, "search_query": str}. SAFE FALLBACK: on any
+    error or unusable output, returns the raw text as a single question so the pipeline
+    never breaks."""
+    text = (text or "").strip()
+    fallback = [{"user_question": text, "search_query": text}]
+    if not text:
+        return fallback
+
+    instruction = (
+        "You analyze a user's message sent to a document question-answering system. "
+        "The message may contain ONE or SEVERAL distinct questions, even if the user "
+        "uses periods instead of question marks, writes informally, or has spelling "
+        "mistakes. Your job is ONLY to understand and restructure the request -- never "
+        "to answer it.\n\n"
+        "Rules:\n"
+        "- Identify each genuinely distinct question. Do NOT split a single question "
+        "from its modifiers: phrases like 'مفصل توضیح بده' / 'explain in detail' / "
+        "'به طور خلاصه' are part of the same question, not a new one.\n"
+        "- Do NOT invent questions that were not asked.\n"
+        "- For each question, write a concise SEARCH QUERY in the SAME language as that "
+        "question (do not translate it): correct obvious spelling, expand colloquialisms, "
+        "and drop filler/instruction words.\n"
+        "- Anchor the search query on the TOPIC and key concepts, NOT on a person's bare "
+        "name. A bare name can match the wrong person, and the document often discusses a "
+        "view without naming who holds it. So for 'X's view on free will' / "
+        "'نظر X درباره اراده آزاد', search for the topic itself (e.g. 'وجود اراده آزاد؛ "
+        "استدلال کتاب') rather than the name X.\n\n"
+        "Return ONLY valid JSON: "
+        '{"questions": [{"user_question": "...", "search_query": "..."}]}'
+    )
+    try:
+        resp = ollama.chat(
+            model=OLLAMA_MODEL,
+            messages=[
+                {"role": "system", "content": instruction},
+                {"role": "user", "content": text},
+            ],
+            options={"temperature": 0.0, "num_ctx": OLLAMA_NUM_CTX},
+            format="json",
+        )
+        data = json.loads(resp["message"]["content"])
+        cleaned = []
+        for q in (data.get("questions") or [])[:10]:
+            uq = (q.get("user_question") or "").strip()
+            sq = (q.get("search_query") or "").strip()
+            uq, sq = uq or sq, sq or uq
+            if uq:
+                cleaned.append({"user_question": uq, "search_query": sq})
+        return cleaned or fallback
+    except Exception as e:
+        print(f"understand_query: falling back to raw text ({e})", flush=True)
+        return fallback
 
 
 def query_documents(question: str, n_results: int = 5, document_id: str = None, user_id: int = None) -> List[Dict]:
@@ -224,15 +299,88 @@ def query_documents(question: str, n_results: int = 5, document_id: str = None, 
         return []
 
 
+_reranker = None
+_reranker_failed = False
+
+
+def _get_reranker():
+    """Lazily load the cross-encoder reranker once, on first use. Returns the model or
+    None if it can't be loaded (in which case we silently fall back to dense ranking)."""
+    global _reranker, _reranker_failed
+    if _reranker is not None or _reranker_failed:
+        return _reranker
+    try:
+        from sentence_transformers import CrossEncoder
+        print(f"[rag] loading reranker {RERANKER_MODEL} on {RERANKER_DEVICE} ...", flush=True)
+        _reranker = CrossEncoder(RERANKER_MODEL, device=RERANKER_DEVICE, max_length=512)
+        print("[rag] reranker ready", flush=True)
+    except Exception as e:
+        _reranker_failed = True
+        print(f"[rag] reranker unavailable, falling back to dense ranking ({e})", flush=True)
+    return _reranker
+
+
+def rerank(query: str, chunks: List[Dict], top_k: int) -> List[Dict]:
+    """Reorder `chunks` by cross-encoder relevance to `query` and keep the best top_k.
+    Safe fallback: if the reranker is disabled/unavailable or errors, returns the first
+    top_k chunks unchanged (i.e. the dense order)."""
+    if not chunks:
+        return []
+    if not ENABLE_RERANKER:
+        return chunks[:top_k]
+    model = _get_reranker()
+    if model is None:
+        return chunks[:top_k]
+    try:
+        scores = model.predict([(query, c["text"]) for c in chunks])
+        ranked = sorted(zip(chunks, scores), key=lambda cs: float(cs[1]), reverse=True)
+        return [c for c, _ in ranked[:top_k]]
+    except Exception as e:
+        print(f"rerank: falling back to dense order ({e})", flush=True)
+        return chunks[:top_k]
+
+
+def retrieve(query: str, document_id: str = None, user_id: int = None,
+             top_k: int = None) -> List[Dict]:
+    """Two-stage retrieval used by the answer pipeline: dense wide net -> cross-encoder
+    rerank -> top_k. With reranking disabled this degrades to plain dense top_k."""
+    top_k = top_k or RERANK_TOP_K
+    wide = query_documents(query, n_results=RETRIEVE_K, document_id=document_id, user_id=user_id)
+    return rerank(query, wide, top_k)
+
+
+def _clean_heading(value) -> Optional[str]:
+    """Keep only values that look like a real heading. Drops the junk this book's
+    conversion produced: the placeholder "[]" chapter, and body paragraphs that the
+    ingest step mis-detected as headings (a real heading is short and is not a full
+    sentence/paragraph). A proper fix lives in the ingest/chunker preprocessing; this
+    just stops the bad values from reaching the citation shown to the user."""
+    if not value:
+        return None
+    v = str(value).strip()
+    if not v or v == "[]":
+        return None
+    # Mis-detected paragraph-as-heading: too long, or ends like a sentence.
+    if len(v) > 80 or v.rstrip().endswith((".", "؟", "!", "[1]")):
+        return None
+    return v
+
+
 def _citation_label(chunk: Dict) -> str:
-    """Builds a citation string: filename — chapter — section — p.N — chunk N,
-    falling back to the old 'filename — chunk N' format when no chapter/
-    section/page metadata is available (e.g. for chunks indexed before Step 2)."""
+    """Builds a citation: filename — <best real heading> — p.N — chunk N.
+
+    For this corpus `chapter` is the junk "[]" placeholder and `section` is often a
+    mis-detected paragraph, while `subsection` holds the real nearby heading. So we
+    cite the most specific *trustworthy* heading available (subsection, then section,
+    then chapter), after filtering junk. Page is included only when present."""
     parts = [chunk["source"]]
-    if chunk.get("chapter"):
-        parts.append(chunk["chapter"])
-    if chunk.get("section"):
-        parts.append(chunk["section"])
+    heading = (
+        _clean_heading(chunk.get("subsection"))
+        or _clean_heading(chunk.get("section"))
+        or _clean_heading(chunk.get("chapter"))
+    )
+    if heading:
+        parts.append(heading)
     if chunk.get("page"):
         parts.append(f"p.{chunk['page']}")
     parts.append(f"chunk {chunk['chunk']}")
@@ -247,68 +395,6 @@ def _question_language(text: str) -> str:
     if re.search(r"[؀-ۿ]", text or ""):
         return "fa"
     return "en"
-
-
-def _text_language(text: str) -> str:
-    """Majority-script of an arbitrary text (used to audit the *model's answer*,
-    not the question). Returns 'fa', 'en', or 'unknown'."""
-    fa = len(re.findall(r"[؀-ۿ]", text or ""))
-    en = len(re.findall(r"[A-Za-z]", text or ""))
-    if fa == 0 and en == 0:
-        return "unknown"
-    return "fa" if fa >= en else "en"
-
-
-# Patterns that mean "the view/opinion of <NAME>" — used only to GUARD against
-# attributing a stance to someone absent from the retrieved context.
-_ENTITY_PATTERNS = [
-    r"از\s*نظر\s+(.+?)(?:\s+(?:چیه|چیست|چی|چطور|درباره|راجع|در\s*مورد|است|هست)\b|[،؟?]|$)",
-    r"از\s*دیدگاه\s+(.+?)(?:\s+(?:چیه|چیست|چی|درباره|راجع|در\s*مورد)\b|[،؟?]|$)",
-    r"\bنظر\s+(.+?)\s+(?:درباره|راجع\s*به|در\s*مورد)\b",
-    r"به\s*گفته[ٔ‌ ]?\s*(.+?)(?:[،؟?]|\s+(?:درباره|در\s*مورد)\b|$)",
-    r"according to\s+([A-Za-z.''\- ]+?)(?:\s+(?:about|on|regarding)\b|[,?.]|$)",
-    r"what does\s+([A-Za-z.''\- ]+?)\s+(?:say|think|argue|believe|claim)\b",
-    r"([A-Z][A-Za-z.''\-]+(?:\s+[A-Z][A-Za-z.''\-]+)*)'s\s+(?:view|opinion|take|argument|position)\b",
-]
-
-_DISCLAIMER_MARKERS = [
-    "پیدا نکردم", "اشاره‌ای به", "اشاره ای به", "یافت نشد", "ذکر نشده", "نشده است",
-    "not found", "couldn't find", "could not find", "couldn’t find",
-    "does not mention", "doesn't mention", "no mention",
-]
-
-
-def _extract_asked_entity(question: str):
-    """Heuristic: if the question asks for the view/opinion of a specific named
-    person ('از نظر محمد اشکریز...', 'according to X...'), return that name; else
-    None. This never adds content — it only decides whether to RUN the guard."""
-    for pat in _ENTITY_PATTERNS:
-        m = re.search(pat, question or "", flags=re.IGNORECASE)
-        if m:
-            name = m.group(1).strip(" \t.،؟?\"'")
-            # drop trivial/topic-like captures
-            if name and len(name) >= 2 and name.lower() not in ("the book", "it", "این کتاب", "کتاب"):
-                return name
-    return None
-
-
-def _entity_in_text(entity: str, text: str) -> bool:
-    """Whether a named entity is actually present in the retrieved text. Matches the
-    full name, or its distinctive last token (surname), case-insensitively."""
-    e = (entity or "").strip().lower()
-    t = (text or "").lower()
-    if not e:
-        return False
-    if e in t:
-        return True
-    tokens = [tok for tok in re.split(r"\s+", e) if len(tok) >= 3]
-    if not tokens:
-        return False
-    return tokens[-1] in t
-
-
-def _has_disclaimer(answer: str) -> bool:
-    return any(m in (answer or "") for m in _DISCLAIMER_MARKERS)
 
 
 def generate_response(
@@ -335,115 +421,118 @@ def generate_response(
         if lang == "fa":
             language_directive = (
                 "زبان سؤال کاربر فارسی است. کل پاسخ را فقط و فقط به فارسیِ روان و طبیعی "
-                "بنویس، حتی اگر متنِ بازیابی‌شده انگلیسی باشد. به هیچ زبان دیگری پاسخ نده."
+                "بنویس، حتی اگر متنِ بازیابی‌شده انگلیسی باشد."
             )
-            entity_template_hint = (
-                "برای پاسخِ فارسی دقیقاً از همین قالب استفاده کن و جای‌نگه‌دارها را پر کن: "
-                "«در بخش‌های بازیابی‌شده، اشاره‌ای به [نام موجودیت] پیدا نکردم؛ اما متن "
-                "درباره [موضوع] چنین می‌گوید: ...»."
-            )
+            lang_reminder = "یادآوری: پاسخ را فقط به فارسیِ روان بنویس."
         else:
             language_directive = (
-                "The user's question is in English. Write your entire answer in English, "
-                "even if the retrieved context is in another language."
+                "The user's question is in English. Write your entire answer in fluent "
+                "English, even if the retrieved context is in another language."
             )
-            entity_template_hint = (
-                "For an English answer use this shape, filling in the placeholders: "
-                "\"I couldn't find any mention of [entity] in the retrieved passages, but "
-                "the text does say the following about [topic]: ...\"."
-            )
+            lang_reminder = "Reminder: answer in English."
 
         scope_instruction = (
-            f"The user has restricted the scope to a single document: \"{selected_source}\". "
-            "Only use context chunks from that document. Ignore any general knowledge you may "
-            "have about the topic. "
+            f"The user restricted the scope to a single document: \"{selected_source}\". "
+            "Use only context from that document. "
             if scope == "selected"
             else ""
         )
 
+        # One short, principled prompt. No rule cascades, no entity regex, no
+        # placeholder templates -- those made answers worse (see plan/). The model is
+        # trusted to apply clear principles; grounding stays strict because the answer
+        # may only use the verbatim retrieved context below.
         system_content = (
-            "You are a careful, grounded question-answering assistant. Answer ONLY from the "
-            "retrieved context provided below.\n\n"
-            "ANSWER LANGUAGE (highest priority): " + language_directive + " The answer "
-            "language is decided solely by the language of the question, never by the "
-            "language of the retrieved context.\n\n"
-            "GROUNDING: Use only information that is actually present in the retrieved "
-            "context. Do not use outside/general knowledge and do not invent facts. You may "
-            "use basic reading comprehension (for example, recognizing that a term and its "
-            "translation refer to the same thing), but never introduce a claim that is not "
-            "supported by the retrieved context. Never attribute a view or statement to a "
-            "person who is not actually named in the retrieved context.\n\n"
-            "DECISION PROCEDURE (apply in order, then stop):\n"
-            "1) If the retrieved context does not address the question at all, reply with "
-            "exactly this sentence and nothing else: \"" + no_info_message + "\"\n"
-            "2) Otherwise, check whether the QUESTION ITSELF names a specific person, author, "
-            "or work. Only if it does AND that exact name (or an obvious equivalent) is NOT "
-            "present in the retrieved context: begin by stating that this name was not found, "
-            "then give the grounded information about the general topic instead. Do not "
-            "attribute any view to the missing person. " + entity_template_hint + "\n"
-            "3) In EVERY OTHER case, simply answer the question directly and naturally from "
-            "the context. Do NOT add any preamble about whether a name or entity is or isn't "
-            "mentioned, and never invent a name just to say it was not found. The disclaimer "
-            "in step 2 is allowed ONLY when the user's own question contained a specific "
-            "personal name that is missing from the context. For example, for a general "
-            "question such as \"what does the book say about X?\" / «کتاب درباره X چه می‌گوید؟», "
-            "answer directly about X and do NOT include any sentence about a name not being "
-            "found.\n\n"
-            "STYLE: Be natural, clear, and useful, and match the depth of the answer to the "
-            "question. Do not be creative, loose, or speculative. " + scope_instruction
+            "You are a knowledgeable assistant answering questions about the user's "
+            "documents, using only the retrieved context provided below.\n\n"
+            "ANSWER LANGUAGE (most important): " + language_directive + " The answer "
+            "language is decided only by the question, never by the language of the context.\n\n"
+            "GROUNDING: Use only what is actually in the retrieved context. Do not use "
+            "outside or general knowledge, and do not invent facts. You may use ordinary "
+            "reading comprehension (e.g. recognizing that a term and its translation mean the "
+            "same thing).\n\n"
+            "IF the retrieved context does not contain enough to answer, reply with exactly "
+            "this sentence and nothing else: \"" + no_info_message + "\"\n\n"
+            "NAMED-PERSON CHECK (very important): The retrieved context is selected by topic "
+            "and may NOT mention the specific person named in the question. Before you write "
+            "\"<name> believes/says/argues ...\" or otherwise attribute any view to a named "
+            "person, first check whether that person's actual name literally appears in the "
+            "retrieved context. Do NOT assume the person named in the question is the author "
+            "of the document or anyone mentioned in it -- a name only counts as present if it "
+            "literally appears in the retrieved context above. If the name does NOT appear "
+            "there, you must NOT attribute anything to them, must NOT call them the author, "
+            "and must NOT put their name in your answer as a view-holder. Instead, briefly "
+            "note that the text does not specifically discuss that person, then answer about "
+            "the topic itself from the context. Only attribute a view to a person whose name "
+            "actually appears in the retrieved context.\n"
+            "Worked example: if the question is «نظر فلانی درباره اراده آزاد چیه؟» and the "
+            "name «فلانی» does not literally appear in the context (even though the context "
+            "talks about 'the author' or says 'I'), the correct answer begins with something "
+            "like «در متن بازیابی‌شده به‌طور خاص دربارهٔ فلانی چیزی نیامده است» and then "
+            "summarizes the topic. It must NOT say «فلانی نویسنده است» or «فلانی معتقد است ...». "
+            "On the other hand, if the asked name (or an obvious equivalent) DOES literally "
+            "appear in the retrieved context, just answer normally and attribute to them -- do "
+            "NOT add any 'not discussed' note in that case.\n\n"
+            "STYLE: Answer directly, naturally, and fluently, like a knowledgeable person "
+            "explaining clearly. Match the depth to the question -- keep simple questions "
+            "concise, and when the user asks for explanation or detail, give a fuller, "
+            "well-organized answer. Do not be creative or speculative. " + scope_instruction
         ).strip()
-
-        lang_reminder = (
-            "یادآوری: پاسخ را فقط به فارسی بنویس."
-            if lang == "fa"
-            else "Reminder: write the answer in English."
-        )
 
         user_content = f"Context:\n{context}\n\nQuestion: {question}\n\n{lang_reminder}"
 
-        def _chat(system: str) -> str:
-            resp = ollama.chat(
-                model=OLLAMA_MODEL,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user_content},
-                ],
-                options={"temperature": 0.0, "num_ctx": OLLAMA_NUM_CTX},
-            )
-            return resp["message"]["content"].strip()
-
-        answer = _chat(system_content)
-
-        # --- Deterministic guard 1: never attribute a view to a named person who is
-        # absent from the retrieved context. Triggers ONLY when the question asks for
-        # a specific person's view AND that name is not in the context AND the model
-        # did not already disclaim. The fix is a forced regeneration (still grounded in
-        # the same chunks) -- it invents no content. ----------------------------------
-        asked_entity = _extract_asked_entity(question)
-        if asked_entity and not _entity_in_text(asked_entity, context) and not _has_disclaimer(answer):
-            forced = system_content + (
-                f"\n\nCRITICAL OVERRIDE: The name \"{asked_entity}\" does NOT appear anywhere "
-                f"in the retrieved context above. You must NOT attribute any view, opinion, or "
-                f"statement to \"{asked_entity}\". Begin your answer by clearly stating that "
-                f"\"{asked_entity}\" was not found in the retrieved text, then explain ONLY the "
-                f"grounded general topic from the context."
-            )
-            answer = _chat(forced)
-
-        # --- Deterministic guard 2: a Persian question must get a Persian answer, even
-        # if the retrieved context is English. Regenerate once if the model slipped. ---
-        if lang == "fa" and _text_language(answer) == "en":
-            forced_lang = system_content + (
-                "\n\nCRITICAL OVERRIDE: Write the ENTIRE answer in fluent Persian (فارسی) only. "
-                "Do not output any English sentences."
-            )
-            answer = _chat(forced_lang)
-
-        if answer == no_info_message:
-            sources = []
-        else:
-            sources = [_citation_label(c) for c in relevant_chunks]
+        response = ollama.chat(
+            model=OLLAMA_MODEL,
+            messages=[
+                {"role": "system", "content": system_content},
+                {"role": "user", "content": user_content},
+            ],
+            options={"temperature": 0.0, "num_ctx": OLLAMA_NUM_CTX},
+        )
+        answer = response["message"]["content"].strip()
+        sources = [] if answer == no_info_message else [_citation_label(c) for c in relevant_chunks]
         return {"answer": answer, "sources": sources}
     except Exception as e:
         print(f"Error generating response: {str(e)}")
         return {"answer": "Error generating response.", "sources": []}
+
+
+def answer_request(
+    question: str,
+    scope: str = "all",
+    document_id: str = None,
+    user_id: int = None,
+    selected_source: str = None,
+) -> Dict:
+    """End-to-end answer pipeline used by the app:
+        understand the message -> for each distinct question, retrieve its own context
+        and answer it grounded -> assemble.
+
+    A single question returns a single clean answer (same shape as generate_response).
+    Several questions return one organized response that addresses each in turn, each
+    grounded only in its own retrieved context (so questions never cross-contaminate
+    and the context window never has to hold everything at once)."""
+    doc_filter = document_id if scope == "selected" else None
+    sub_qs = understand_query(question)
+
+    if len(sub_qs) == 1:
+        sq = sub_qs[0]
+        chunks = retrieve(sq["search_query"], document_id=doc_filter, user_id=user_id)
+        return generate_response(
+            sq["user_question"], chunks, scope=scope, selected_source=selected_source
+        )
+
+    blocks = []
+    merged_sources = []
+    seen = set()
+    for sq in sub_qs:
+        chunks = retrieve(sq["search_query"], document_id=doc_filter, user_id=user_id)
+        sub = generate_response(
+            sq["user_question"], chunks, scope=scope, selected_source=selected_source
+        )
+        blocks.append(f"❖ {sq['user_question']}\n{sub['answer']}")
+        for s in sub["sources"]:
+            if s not in seen:
+                seen.add(s)
+                merged_sources.append(s)
+    return {"answer": "\n\n".join(blocks), "sources": merged_sources}

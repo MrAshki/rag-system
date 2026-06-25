@@ -1,0 +1,65 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 497 >>
+stream
+BT
+/F1 11 Tf
+1 0 0 1 50 760 Tm
+(Research Notes) Tj
+1 0 0 1 50 726 Tm
+(Chapter 1: Overview) Tj
+1 0 0 1 50 692 Tm
+(This is the first paragraph of the overview with enough text to act as a real) Tj
+1 0 0 1 50 676 Tm
+(block of body content used for testing the chunker and citations.) Tj
+1 0 0 1 50 642 Tm
+(Part of the methodology relied on careful sampling, and this sentence is a normal) Tj
+1 0 0 1 50 626 Tm
+(paragraph that must not become a heading even though it starts with the word Part.) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 231 >>
+stream
+BT
+/F1 11 Tf
+1 0 0 1 50 760 Tm
+(Chapter 3 covered how the earlier sections connect, but this is body text and must) Tj
+1 0 0 1 50 744 Tm
+(remain a paragraph rather than a heading.) Tj
+1 0 0 1 50 710 Tm
+(A short closing line.) Tj
+ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000191 00000 n 
+0000000317 00000 n 
+0000000865 00000 n 
+0000000991 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+1273
+%%EOF

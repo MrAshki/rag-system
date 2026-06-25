@@ -1,0 +1,22 @@
+[]
+
+[Cover for The Sample Handbook, Author, Jane Doe]
+
+The Sample Handbook
+
+Chapter 1: Getting Started
+
+This is the first real paragraph of content. It explains the basics in a couple of sentences so the chunker has a genuine block of body text to pack into a chunk.
+
+Part of the difficulty in writing good tests is that ordinary paragraphs sometimes begin with words like Part or Chapter, and a naive heading detector will wrongly promote this entire long paragraph to a section heading even though it is plainly body text that runs on for a while.
+
+Chapter 3 covered how the earlier material connects to this section, but this sentence is itself just a normal paragraph and must not be treated as a heading merely because it starts with the word Chapter.
+
+فصل ۲: مبانی
+
+این یک پاراگراف فارسی است که محتوای واقعی دارد و باید به‌عنوان متن عادی پردازش شود نه عنوان. هدف این است که مطمئن شویم متن فارسی به‌درستی و بدون آسیب حفظ می‌شود.
+
+اهداف این بخش:
+- مورد اول برای آزمایش فهرست
+- مورد دوم برای آزمایش فهرست
+- مورد سوم برای آزمایش فهرست

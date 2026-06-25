@@ -21,6 +21,10 @@ OVERLAP_RATIO = 0.18   # ~18%, within the requested 15-20% range
 PAGE_MARKER_RE = re.compile(r"^<!--\s*page:(\d+)\s*-->$")
 HEADING_RE = re.compile(r"^(#{1,3})\s+(.*)$")
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?؟۔])\s+")
+# Defense-in-depth: a real heading is a single short line. Anything longer (or
+# multi-line) that happens to start with '#' is treated as body text, so an upstream
+# mistake can never turn a whole paragraph into a chapter/section label again.
+MAX_HEADING_CHARS = 120
 
 
 def _split_blocks_with_offsets(markdown_text: str) -> List[Tuple[str, int, int]]:
@@ -165,7 +169,7 @@ def parse_markdown_to_chunks(markdown_text: str) -> List[Dict]:
             page = int(m_page.group(1))
             continue
         m_head = HEADING_RE.match(stripped)
-        if m_head:
+        if m_head and "\n" not in stripped and len(m_head.group(2).strip()) <= MAX_HEADING_CHARS:
             level = len(m_head.group(1))
             title = m_head.group(2).strip()
             if level == 1:
