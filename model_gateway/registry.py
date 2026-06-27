@@ -1,6 +1,7 @@
 import os
 
 from model_gateway.base import ChatProvider
+from model_gateway.providers.deepseek_provider import DeepSeekChatProvider
 from model_gateway.providers.gemini_provider import GeminiChatProvider
 from model_gateway.providers.ollama_provider import OllamaChatProvider
 
@@ -18,6 +19,8 @@ def _default_model_for_provider(provider: str) -> str:
         return model
     if provider == "gemini":
         return os.getenv("GEMINI_MODEL") or "gemini-2.5-flash"
+    if provider == "deepseek":
+        return os.getenv("DEEPSEEK_MODEL") or "deepseek-v4-flash"
     raise RuntimeError(f"Unsupported CHAT_PROVIDER={provider!r}.")
 
 
@@ -43,6 +46,15 @@ def get_chat_provider(provider: str = None, model: str = None) -> ChatProvider:
         _chat_providers[key] = GeminiChatProvider(model=model, api_key=api_key)
         return _chat_providers[key]
 
+    if provider == "deepseek":
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        if not api_key:
+            raise RuntimeError(
+                "DEEPSEEK_API_KEY is not set. Add it to .env before using DeepSeek."
+            )
+        _chat_providers[key] = DeepSeekChatProvider(model=model, api_key=api_key)
+        return _chat_providers[key]
+
     raise RuntimeError(f"Unsupported CHAT_PROVIDER={provider!r}.")
 
 
@@ -50,6 +62,7 @@ def list_chat_model_options():
     default_provider = os.getenv("CHAT_PROVIDER", "ollama").strip().lower()
     ollama_model = os.getenv("OLLAMA_MODEL") or os.getenv("CHAT_MODEL")
     gemini_model = os.getenv("GEMINI_MODEL") or "gemini-2.5-flash"
+    deepseek_model = os.getenv("DEEPSEEK_MODEL") or "deepseek-v4-flash"
     options = []
 
     if ollama_model:
@@ -67,5 +80,12 @@ def list_chat_model_options():
         "label": f"Gemini - {gemini_model}",
         "enabled": bool(os.getenv("GEMINI_API_KEY")),
         "default": default_provider == "gemini",
+    })
+    options.append({
+        "provider": "deepseek",
+        "model": deepseek_model,
+        "label": f"DeepSeek - {deepseek_model}",
+        "enabled": bool(os.getenv("DEEPSEEK_API_KEY")),
+        "default": default_provider == "deepseek",
     })
     return options

@@ -409,6 +409,39 @@ def _clean_title(value: str) -> str:
     return (title or "گفتگوی جدید")[:160]
 
 
+def _selected_assets_from_request(user_id: int, data: dict):
+    raw_ids = data.get("asset_ids") or []
+    if isinstance(raw_ids, str):
+        raw_ids = [raw_ids]
+    asset_ids = []
+    seen = set()
+    for raw_id in raw_ids:
+        asset_id = str(raw_id or "").strip()
+        if asset_id and asset_id not in seen:
+            seen.add(asset_id)
+            asset_ids.append(asset_id)
+
+    if not asset_ids:
+        return [], [], None
+
+    rows = db.list_assets_by_ids(user_id, asset_ids)
+    by_id = {row["id"]: row for row in rows}
+    missing = [asset_id for asset_id in asset_ids if asset_id not in by_id]
+    if missing:
+        return None, None, "برخی منابع انتخاب‌شده پیدا نشدند."
+
+    invalid = [
+        row for row in rows
+        if row["category"] != "text" or row["status"] != "scanned"
+    ]
+    if invalid:
+        return None, None, "فعلاً فقط فایل‌های متنی آماده قابل استفاده در چت هستند."
+
+    selected_rows = [by_id[asset_id] for asset_id in asset_ids]
+    selected_names = [row["original_filename"] for row in selected_rows]
+    return asset_ids, selected_names, None
+
+
 def _ask_rate_key() -> str:
     data = request.get_json(silent=True) or {}
     conversation_id = data.get("conversation_id") or "new"
@@ -565,11 +598,18 @@ def ask():
     chat_provider = data.get("chat_provider")
     chat_model = data.get("chat_model")
     conversation_id = data.get("conversation_id")
+    asset_ids, selected_asset_names, asset_error = _selected_assets_from_request(user["id"], data)
 
     if not question:
         return jsonify({"error": "سوال خالی است"}), 400
-    if scope == "selected" and not document_id:
+    if asset_error:
+        return jsonify({"error": asset_error}), 400
+    if scope == "selected" and not document_id and not asset_ids:
         return jsonify({"error": "برای این حالت باید یک سند انتخاب شود"}), 400
+    if asset_ids:
+        scope = "selected"
+        document_id = None
+        document_name = "، ".join(selected_asset_names)
 
     conversation = None
     if conversation_id:
@@ -605,6 +645,7 @@ def ask():
             question,
             scope=scope,
             document_id=document_id,
+            asset_ids=asset_ids,
             user_id=user["id"],
             selected_source=document_name,
             chat_provider_name=chat_provider,
@@ -642,11 +683,18 @@ def ask_stream():
     chat_provider = data.get("chat_provider")
     chat_model = data.get("chat_model")
     conversation_id = data.get("conversation_id")
+    asset_ids, selected_asset_names, asset_error = _selected_assets_from_request(user["id"], data)
 
     if not question:
         return jsonify({"error": "سوال خالی است"}), 400
-    if scope == "selected" and not document_id:
+    if asset_error:
+        return jsonify({"error": asset_error}), 400
+    if scope == "selected" and not document_id and not asset_ids:
         return jsonify({"error": "برای این حالت باید یک سند انتخاب شود"}), 400
+    if asset_ids:
+        scope = "selected"
+        document_id = None
+        document_name = "، ".join(selected_asset_names)
 
     user_id = user["id"]
     if conversation_id:
@@ -696,6 +744,7 @@ def ask_stream():
                 question,
                 scope=scope,
                 document_id=document_id,
+                asset_ids=asset_ids,
                 user_id=user_id,
                 selected_source=document_name,
                 chat_provider_name=chat_provider,

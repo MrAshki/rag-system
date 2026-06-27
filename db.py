@@ -415,6 +415,19 @@ def list_assets(user_id: int, category: str = None, status: str = None):
         ).fetchall()
 
 
+def list_assets_by_ids(user_id: int, asset_ids):
+    asset_ids = [asset_id for asset_id in (asset_ids or []) if asset_id]
+    if not asset_ids:
+        return []
+    with get_db() as conn:
+        return conn.execute(
+            """SELECT * FROM assets
+                WHERE user_id = %s AND id = ANY(%s)
+                ORDER BY created_at DESC""",
+            (user_id, asset_ids),
+        ).fetchall()
+
+
 # ---- conversations ----
 
 def _encode_sources(sources) -> str:

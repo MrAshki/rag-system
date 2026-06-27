@@ -276,12 +276,21 @@ def understand_query(text: str, chat_provider: ChatProvider = None) -> List[Dict
         return fallback
 
 
-def query_documents(question: str, n_results: int = 5, document_id: str = None, user_id: int = None) -> List[Dict]:
+def query_documents(
+    question: str,
+    n_results: int = 5,
+    document_id: str = None,
+    document_ids: List[str] = None,
+    user_id: int = None,
+) -> List[Dict]:
     try:
         conditions = []
         if user_id is not None:
             conditions.append({"user_id": user_id})
-        if document_id:
+        document_ids = [doc_id for doc_id in (document_ids or []) if doc_id]
+        if document_ids:
+            conditions.append({"document_id": {"$in": document_ids}})
+        elif document_id:
             conditions.append({"document_id": document_id})
 
         if len(conditions) == 0:
@@ -359,12 +368,18 @@ def rerank(query: str, chunks: List[Dict], top_k: int) -> List[Dict]:
         return chunks[:top_k]
 
 
-def retrieve(query: str, document_id: str = None, user_id: int = None,
+def retrieve(query: str, document_id: str = None, document_ids: List[str] = None, user_id: int = None,
              top_k: int = None) -> List[Dict]:
     """Two-stage retrieval used by the answer pipeline: dense wide net -> cross-encoder
     rerank -> top_k. With reranking disabled this degrades to plain dense top_k."""
     top_k = top_k or RERANK_TOP_K
-    wide = query_documents(query, n_results=RETRIEVE_K, document_id=document_id, user_id=user_id)
+    wide = query_documents(
+        query,
+        n_results=RETRIEVE_K,
+        document_id=document_id,
+        document_ids=document_ids,
+        user_id=user_id,
+    )
     return rerank(query, wide, top_k)
 
 
@@ -515,6 +530,55 @@ def _sources_for_answer(answer: str, no_info_message: str, chunks: List[Dict]) -
     return [] if answer == no_info_message else [_citation_label(c) for c in chunks]
 
 
+def _build_free_chat_messages(question: str) -> List[Dict]:
+    lang = _question_language(question)
+    if lang == "fa":
+        language_directive = "به فارسی روان، مستقیم و طبیعی پاسخ بده."
+    else:
+        language_directive = "Answer directly and naturally in English."
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are a helpful general-purpose assistant. "
+                "This is free chat mode: no document context was selected, so you may use general knowledge. "
+                + language_directive
+            ),
+        },
+        {"role": "user", "content": question},
+    ]
+
+
+def generate_free_response(question: str, chat_provider: ChatProvider = None) -> Dict:
+    try:
+        provider = chat_provider or CHAT_PROVIDER
+        answer = provider.chat(
+            messages=_build_free_chat_messages(question),
+            options={"temperature": 0.2, "num_ctx": OLLAMA_NUM_CTX},
+        ).strip()
+        return {"answer": answer, "sources": []}
+    except Exception as e:
+        print(f"Error generating free chat response: {str(e)}")
+        return {"answer": "خطا در تولید پاسخ.", "sources": []}
+
+
+def generate_free_response_stream(question: str, chat_provider: ChatProvider = None) -> Iterable[Dict]:
+    try:
+        provider = chat_provider or CHAT_PROVIDER
+        answer_parts = []
+        for delta in provider.stream_chat(
+            messages=_build_free_chat_messages(question),
+            options={"temperature": 0.2, "num_ctx": OLLAMA_NUM_CTX},
+        ):
+            answer_parts.append(delta)
+            yield {"type": "token", "delta": delta}
+        answer = "".join(answer_parts).strip()
+        yield {"type": "final", "answer": answer, "sources": []}
+    except Exception as e:
+        print(f"Error streaming free chat response: {str(e)}")
+        yield {"type": "error", "error": "خطا در تولید پاسخ."}
+
+
 def generate_response(
     question: str,
     relevant_chunks: List[Dict],
@@ -590,6 +654,7 @@ def answer_request(
     question: str,
     scope: str = "all",
     document_id: str = None,
+    asset_ids: List[str] = None,
     user_id: int = None,
     selected_source: str = None,
     chat_provider_name: str = None,
@@ -603,13 +668,25 @@ def answer_request(
     Several questions return one organized response that addresses each in turn, each
     grounded only in its own retrieved context (so questions never cross-contaminate
     and the context window never has to hold everything at once)."""
-    doc_filter = document_id if scope == "selected" else None
+    asset_ids = [asset_id for asset_id in (asset_ids or []) if asset_id]
+    doc_filter = document_id if scope == "selected" and not asset_ids else None
+    doc_filters = asset_ids or None
+    if asset_ids:
+        scope = "selected"
     provider = get_chat_provider(chat_provider_name, chat_model)
+    if not doc_filters and not doc_filter:
+        return generate_free_response(question, chat_provider=provider)
+
     sub_qs = understand_query(question, chat_provider=provider)
 
     if len(sub_qs) == 1:
         sq = sub_qs[0]
-        chunks = retrieve(sq["search_query"], document_id=doc_filter, user_id=user_id)
+        chunks = retrieve(
+            sq["search_query"],
+            document_id=doc_filter,
+            document_ids=doc_filters,
+            user_id=user_id,
+        )
         return generate_response(
             sq["user_question"],
             chunks,
@@ -622,7 +699,12 @@ def answer_request(
     merged_sources = []
     seen = set()
     for sq in sub_qs:
-        chunks = retrieve(sq["search_query"], document_id=doc_filter, user_id=user_id)
+        chunks = retrieve(
+            sq["search_query"],
+            document_id=doc_filter,
+            document_ids=doc_filters,
+            user_id=user_id,
+        )
         sub = generate_response(
             sq["user_question"],
             chunks,
@@ -642,6 +724,7 @@ def answer_request_stream(
     question: str,
     scope: str = "all",
     document_id: str = None,
+    asset_ids: List[str] = None,
     user_id: int = None,
     selected_source: str = None,
     chat_provider_name: str = None,
@@ -656,9 +739,27 @@ def answer_request_stream(
       error: recoverable failure
       done: stream is complete
     """
-    doc_filter = document_id if scope == "selected" else None
+    asset_ids = [asset_id for asset_id in (asset_ids or []) if asset_id]
+    doc_filter = document_id if scope == "selected" and not asset_ids else None
+    doc_filters = asset_ids or None
+    if asset_ids:
+        scope = "selected"
     provider = get_chat_provider(chat_provider_name, chat_model)
     yield _trace("request", "started")
+
+    if not doc_filters and not doc_filter:
+        yield _trace("generate", "started", provider=provider.name, model=provider.model, mode="free_chat")
+        final_event = None
+        for event in generate_free_response_stream(question, chat_provider=provider):
+            if event.get("type") == "final":
+                final_event = event
+            else:
+                yield event
+        yield _trace("generate", "done", mode="free_chat")
+        if final_event:
+            yield final_event
+        yield {"type": "done"}
+        return
 
     yield _trace("understand_query", "started")
     sub_qs = understand_query(question, chat_provider=provider)
@@ -667,7 +768,12 @@ def answer_request_stream(
     if len(sub_qs) == 1:
         sq = sub_qs[0]
         yield _trace("retrieve", "started", query=sq["search_query"])
-        chunks = retrieve(sq["search_query"], document_id=doc_filter, user_id=user_id)
+        chunks = retrieve(
+            sq["search_query"],
+            document_id=doc_filter,
+            document_ids=doc_filters,
+            user_id=user_id,
+        )
         yield _trace("retrieve", "done", chunks=len(chunks))
 
         yield _trace(
@@ -706,7 +812,12 @@ def answer_request_stream(
             question=sq["user_question"],
         )
         yield _trace("retrieve", "started", index=i + 1, query=sq["search_query"])
-        chunks = retrieve(sq["search_query"], document_id=doc_filter, user_id=user_id)
+        chunks = retrieve(
+            sq["search_query"],
+            document_id=doc_filter,
+            document_ids=doc_filters,
+            user_id=user_id,
+        )
         yield _trace("retrieve", "done", index=i + 1, chunks=len(chunks))
 
         separator = "\n\n" if i else ""
