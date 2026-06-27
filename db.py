@@ -23,6 +23,19 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ NOT NULL
 );
 
+-- Registration profile fields, added after the initial phone-only schema.
+-- All nullable so pre-existing phone-only accounts keep working untouched; they
+-- get populated when a user completes the full register form. `password_hash` is
+-- set only for accounts that registered with an email+password (the alternate
+-- login path); phone+OTP-only accounts leave it NULL. `email` is unique among
+-- non-NULL values (Postgres lets multiple NULLs coexist under a UNIQUE index).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name    TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name     TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email         TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_date    DATE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users (email);
+
 CREATE TABLE IF NOT EXISTS otp_codes (
     id SERIAL PRIMARY KEY,
     phone TEXT NOT NULL,
@@ -64,6 +77,31 @@ CREATE TABLE IF NOT EXISTS payments (
     paid_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_pay_authority ON payments (authority);
+
+-- Per-user uploaded files (the gallery). Single source of truth for a user's
+-- assets and their scan lifecycle; Chroma still holds the chunk vectors for
+-- retrieval, but file ownership/status lives here. `id` is the asset_id (uuid
+-- hex), which for text assets is also the Chroma document_id.
+CREATE TABLE IF NOT EXISTS assets (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    category TEXT NOT NULL,              -- text | image | audio | video
+    original_filename TEXT NOT NULL,
+    file_ext TEXT NOT NULL,
+    size_bytes BIGINT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'uploaded',
+        -- text:  uploaded -> scanning -> scanned | failed
+        -- media: uploaded -> stored   (no processing pipeline yet)
+    scan_error TEXT,
+    chunk_count INTEGER,
+    original_path TEXT NOT NULL,
+    normalized_md_path TEXT,
+    extraction_warning TEXT,
+    created_at TIMESTAMPTZ NOT NULL,
+    scanned_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_assets_user   ON assets (user_id, category, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_assets_status ON assets (status);
 """
 
 
@@ -104,6 +142,11 @@ def get_user_by_id(user_id: int):
         return conn.execute("SELECT * FROM users WHERE id = %s", (user_id,)).fetchone()
 
 
+def get_user_by_email(email: str):
+    with get_db() as conn:
+        return conn.execute("SELECT * FROM users WHERE email = %s", (email,)).fetchone()
+
+
 def get_or_create_user(phone: str):
     user = get_user_by_phone(phone)
     if user:
@@ -119,6 +162,39 @@ def get_or_create_user(phone: str):
 def mark_user_verified(phone: str):
     with get_db() as conn:
         conn.execute("UPDATE users SET is_verified = TRUE WHERE phone = %s", (phone,))
+
+
+def complete_user_registration(phone, first_name, last_name, email, birth_date, password_hash):
+    """Fill in a user's profile after their phone is OTP-verified during the full
+    register flow. The phone row already exists (get_or_create_user makes a stub on
+    OTP verify), so this just patches in the collected fields and marks it verified.
+    Returns the refreshed user row."""
+    user = get_or_create_user(phone)
+    with get_db() as conn:
+        conn.execute(
+            """UPDATE users
+                   SET first_name = %s, last_name = %s, email = %s,
+                       birth_date = %s, password_hash = %s, is_verified = TRUE
+                 WHERE id = %s""",
+            (first_name, last_name, email, birth_date, password_hash, user["id"]),
+        )
+    return get_user_by_id(user["id"])
+
+
+def update_user_profile(user_id: int, first_name, last_name, email, birth_date):
+    """Edit the user-facing profile fields from the profile page. Phone is the
+    verified identity and is intentionally not editable here."""
+    with get_db() as conn:
+        conn.execute(
+            """UPDATE users SET first_name = %s, last_name = %s, email = %s, birth_date = %s
+                 WHERE id = %s""",
+            (first_name, last_name, email, birth_date, user_id),
+        )
+
+
+def set_user_password(user_id: int, password_hash: str):
+    with get_db() as conn:
+        conn.execute("UPDATE users SET password_hash = %s WHERE id = %s", (password_hash, user_id))
 
 
 def list_users():
@@ -252,6 +328,19 @@ def mark_payment_failed(payment_id: int):
         conn.execute("UPDATE payments SET status = 'failed' WHERE id = %s", (payment_id,))
 
 
+def list_payments_for_user(user_id: int):
+    """A single user's own payment history, for their profile page."""
+    with get_db() as conn:
+        return conn.execute(
+            """SELECT payments.*, plans.name AS plan_name
+                 FROM payments
+                 JOIN plans ON plans.id = payments.plan_id
+                WHERE payments.user_id = %s
+                ORDER BY payments.created_at DESC""",
+            (user_id,),
+        ).fetchall()
+
+
 def list_payments_for_admin():
     with get_db() as conn:
         return conn.execute(
@@ -261,3 +350,96 @@ def list_payments_for_admin():
                JOIN plans ON plans.id = payments.plan_id
                ORDER BY payments.created_at DESC"""
         ).fetchall()
+
+
+# ---- assets (gallery / per-user files) ----
+
+def create_asset(asset_id: str, user_id: int, category: str, original_filename: str,
+                 file_ext: str, size_bytes: int, original_path: str, status: str = "uploaded"):
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO assets
+                   (id, user_id, category, original_filename, file_ext, size_bytes,
+                    original_path, status, created_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (asset_id, user_id, category, original_filename, file_ext, size_bytes,
+             original_path, status, now()),
+        )
+
+
+def get_asset(asset_id: str):
+    with get_db() as conn:
+        return conn.execute("SELECT * FROM assets WHERE id = %s", (asset_id,)).fetchone()
+
+
+def list_assets(user_id: int, category: str = None, status: str = None):
+    clauses = ["user_id = %s"]
+    params = [user_id]
+    if category:
+        clauses.append("category = %s")
+        params.append(category)
+    if status:
+        clauses.append("status = %s")
+        params.append(status)
+    with get_db() as conn:
+        return conn.execute(
+            f"SELECT * FROM assets WHERE {' AND '.join(clauses)} ORDER BY created_at DESC",
+            tuple(params),
+        ).fetchall()
+
+
+def update_asset_status(asset_id: str, status: str, scan_error: str = None,
+                        chunk_count: int = None, normalized_md_path: str = None,
+                        extraction_warning: str = None, set_scanned_at: bool = False):
+    """Patch an asset's scan state. Only non-None fields are written, so callers
+    can update just status, or status plus the post-scan result fields."""
+    sets = ["status = %s"]
+    params = [status]
+    if scan_error is not None:
+        sets.append("scan_error = %s")
+        params.append(scan_error)
+    if chunk_count is not None:
+        sets.append("chunk_count = %s")
+        params.append(chunk_count)
+    if normalized_md_path is not None:
+        sets.append("normalized_md_path = %s")
+        params.append(normalized_md_path)
+    if extraction_warning is not None:
+        sets.append("extraction_warning = %s")
+        params.append(extraction_warning)
+    if set_scanned_at:
+        sets.append("scanned_at = %s")
+        params.append(now())
+    params.append(asset_id)
+    with get_db() as conn:
+        conn.execute(f"UPDATE assets SET {', '.join(sets)} WHERE id = %s", tuple(params))
+
+
+def claim_next_uploaded_asset():
+    """Atomically pick the oldest 'uploaded' asset and flip it to 'scanning',
+    returning the claimed row (or None if the queue is empty). FOR UPDATE SKIP
+    LOCKED makes this safe even if several workers/processes poll concurrently --
+    no two claim the same asset."""
+    with get_db() as conn:
+        return conn.execute(
+            """UPDATE assets SET status = 'scanning'
+               WHERE id = (
+                   SELECT id FROM assets WHERE status = 'uploaded'
+                   ORDER BY created_at
+                   FOR UPDATE SKIP LOCKED
+                   LIMIT 1
+               )
+               RETURNING *"""
+        ).fetchone()
+
+
+def requeue_stuck_scanning() -> int:
+    """On startup, return any asset stranded in 'scanning' (e.g. a crash/restart
+    mid-scan) back to 'uploaded' so the worker reprocesses it. Index upserts are
+    idempotent (deterministic chunk ids), so re-running a scan is safe. Returns
+    how many were requeued."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "UPDATE assets SET status = 'uploaded' WHERE status = 'scanning' RETURNING id"
+        ).fetchall()
+        return len(rows)

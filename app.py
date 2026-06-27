@@ -1,4 +1,3 @@
-import io
 import os
 import uuid
 from datetime import datetime, date
@@ -8,7 +7,8 @@ from flask.json.provider import DefaultJSONProvider
 import rag
 import db
 import auth
-from document_pipeline import ingest, chunker
+import storage
+import scan_worker
 import payments
 from ratelimit import rate_limited
 
@@ -22,16 +22,12 @@ class ISOJSONProvider(DefaultJSONProvider):
         return super().default(o)
 
 PERSIAN_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
-ALLOWED_EXTENSIONS = {".txt", ".pdf", ".docx"}
 MAX_UPLOAD_MB = 25
 
 
 def fa_number(n: int) -> str:
     return str(n).translate(PERSIAN_DIGITS)
 
-
-DOCS_DIR = "./docs"
-os.makedirs(DOCS_DIR, exist_ok=True)
 
 db.init_db()
 
@@ -50,6 +46,17 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 # to an https:// URL in production). Forcing this on for local http testing would
 # break login entirely.
 app.config["SESSION_COOKIE_SECURE"] = os.getenv("PUBLIC_BASE_URL", "").startswith("https://")
+
+# Start the background scan worker exactly once, at import time, so it runs no
+# matter how the app is launched -- `python app.py` (dev) OR `python serve.py`
+# (waitress/production), since serve.py just imports `app` and never hits this
+# file's __main__ block. start() is idempotent. Under the Werkzeug debug reloader
+# the parent process re-execs itself and only the child (WERKZEUG_RUN_MAIN=="true")
+# serves requests, so in debug mode we start the worker only in that child to
+# avoid two workers racing on the same queue.
+_DEBUG = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+if not _DEBUG or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+    scan_worker.start()
 
 
 # ---------------------------------------------------------------------------
@@ -84,9 +91,24 @@ def login_page():
     return app.send_static_file("login.html")
 
 
+@app.route("/register.html")
+def register_page():
+    return app.send_static_file("register.html")
+
+
+@app.route("/profile.html")
+def profile_page():
+    return app.send_static_file("profile.html")
+
+
 @app.route("/admin.html")
 def admin_page():
     return app.send_static_file("admin.html")
+
+
+@app.route("/gallery.html")
+def gallery_page():
+    return app.send_static_file("gallery.html")
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +138,62 @@ def auth_verify_otp():
     return jsonify({"status": "ok", "is_admin": bool(user["is_admin"])})
 
 
+@app.route("/api/auth/register/send-otp", methods=["POST"])
+@rate_limited(lambda: f"otp:{request.remote_addr}", min_interval_seconds=2, max_per_window=10, window_seconds=600)
+def auth_register_send_otp():
+    """Send the registration SMS code. Same OTP machinery as login, but rejects a
+    phone that already has a finished account so people don't accidentally try to
+    re-register instead of logging in."""
+    data = request.get_json(silent=True) or {}
+    phone = auth.normalize_phone(data.get("phone", ""))
+    existing = db.get_user_by_phone(phone) if auth.is_valid_phone(phone) else None
+    if existing and existing["password_hash"]:
+        return jsonify({"error": "این شماره قبلاً ثبت‌نام کرده است. لطفاً وارد شوید."}), 400
+    ok, error = auth.request_otp(phone)
+    if not ok:
+        return jsonify({"error": error}), 400
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/auth/register/verify-otp", methods=["POST"])
+def auth_register_verify_otp():
+    data = request.get_json(silent=True) or {}
+    phone = auth.normalize_phone(data.get("phone", ""))
+    code = (data.get("code") or "").strip()
+    ok, error = auth.verify_registration_otp(phone, code)
+    if not ok:
+        return jsonify({"error": error}), 400
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/auth/register/complete", methods=["POST"])
+def auth_register_complete():
+    data = request.get_json(silent=True) or {}
+    phone = auth.normalize_phone(data.get("phone", ""))
+    user, error = auth.complete_registration(
+        phone,
+        data.get("first_name"),
+        data.get("last_name"),
+        data.get("email"),
+        auth.parse_iso_date(data.get("birth_date")),
+        data.get("password"),
+    )
+    if error:
+        return jsonify({"error": error}), 400
+    return jsonify({"status": "ok", "is_admin": bool(user["is_admin"])})
+
+
+@app.route("/api/auth/login-email", methods=["POST"])
+@rate_limited(lambda: f"login-email:{request.remote_addr}", min_interval_seconds=1, max_per_window=20, window_seconds=600)
+def auth_login_email():
+    data = request.get_json(silent=True) or {}
+    ok, error = auth.login_with_email(data.get("email", ""), data.get("password", ""))
+    if not ok:
+        return jsonify({"error": error}), 400
+    user = auth.current_user()
+    return jsonify({"status": "ok", "is_admin": bool(user["is_admin"])})
+
+
 @app.route("/api/auth/logout", methods=["POST"])
 def auth_logout():
     session.clear()
@@ -128,13 +206,60 @@ def auth_me():
     if not user:
         return jsonify({"logged_in": False})
     sub = db.get_active_subscription(user["id"])
+    full_name = " ".join(p for p in (user["first_name"], user["last_name"]) if p).strip()
     return jsonify({
         "logged_in": True,
         "phone": user["phone"],
+        "name": full_name or None,
         "is_admin": bool(user["is_admin"]),
         "has_subscription": bool(user["is_admin"] or sub),
         "subscription_expires_at": sub["expires_at"] if sub else None,
     })
+
+
+# ---------------------------------------------------------------------------
+# Profile (self-service account page)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/profile", methods=["GET"])
+@auth.login_required
+def get_profile():
+    user = auth.current_user()
+    return jsonify({
+        "first_name": user["first_name"],
+        "last_name": user["last_name"],
+        "email": user["email"],
+        "phone": user["phone"],
+        "birth_date": user["birth_date"],   # ISO date via ISOJSONProvider, or null
+        "created_at": user["created_at"],
+        "has_password": bool(user["password_hash"]),
+    })
+
+
+@app.route("/api/profile", methods=["POST"])
+@auth.login_required
+def update_profile():
+    user = auth.current_user()
+    data = request.get_json(silent=True) or {}
+    ok, error = auth.update_profile(
+        user["id"],
+        data.get("first_name"),
+        data.get("last_name"),
+        data.get("email"),
+        auth.parse_iso_date(data.get("birth_date")),
+        data.get("password"),
+    )
+    if not ok:
+        return jsonify({"error": error}), 400
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/profile/payments", methods=["GET"])
+@auth.login_required
+def profile_payments():
+    user = auth.current_user()
+    rows = db.list_payments_for_user(user["id"])
+    return jsonify({"payments": [dict(p) for p in rows]})
 
 
 # ---------------------------------------------------------------------------
@@ -213,76 +338,107 @@ def payment_callback():
 @app.route("/api/documents", methods=["GET"])
 @auth.login_required
 def list_documents():
+    """Documents available to the Q&A tool: the user's text assets that have
+    finished scanning. Backed by the assets registry (single source of truth)
+    rather than scraping Chroma metadata; asset id == Chroma document_id."""
     user = auth.current_user()
-    return jsonify({"documents": rag.list_documents(user_id=user["id"])})
+    docs = [
+        {"document_id": a["id"], "source": a["original_filename"]}
+        for a in db.list_assets(user["id"], category="text", status="scanned")
+    ]
+    return jsonify({"documents": docs})
 
 
-@app.route("/api/upload", methods=["POST"])
+# ---------------------------------------------------------------------------
+# Gallery (per-user file store + async scan)
+# ---------------------------------------------------------------------------
+
+def _asset_to_json(a) -> dict:
+    return {
+        "id": a["id"],
+        "filename": a["original_filename"],
+        "category": a["category"],
+        "ext": a["file_ext"],
+        "size_bytes": a["size_bytes"],
+        "status": a["status"],
+        "chunk_count": a["chunk_count"],
+        "scan_error": a["scan_error"],
+        "warning": a["extraction_warning"],
+        "created_at": a["created_at"],
+    }
+
+
+@app.route("/api/gallery/upload", methods=["POST"])
 @auth.subscription_required
 @rate_limited(lambda: f"upload:{session.get('user_id')}", min_interval_seconds=3, max_per_window=20, window_seconds=600)
-def upload():
+def gallery_upload():
+    """Accept one or more files (drag-drop), store each under the user's
+    per-category folder, register it as an asset, and hand off to the background
+    scan worker. Returns immediately; the actual normalize/index happens async."""
     user = auth.current_user()
-    file = request.files.get("file")
-    if not file:
+    files = request.files.getlist("files")
+    if not files:
+        single = request.files.get("file")  # Q&A dropzone sends a single 'file'
+        if single:
+            files = [single]
+    files = [f for f in files if f and f.filename]
+    if not files:
         return jsonify({"error": "فایلی انتخاب نشده است"}), 400
 
-    ext = os.path.splitext(file.filename)[1].lower()
-    if ext not in ALLOWED_EXTENSIONS:
-        return jsonify({"error": "فقط فایل‌های .txt، .pdf و .docx پشتیبانی می‌شوند"}), 400
+    created, rejected = [], []
+    for file in files:
+        ext = os.path.splitext(file.filename)[1].lower()
+        category = storage.category_for_ext(ext)
+        if not category:
+            rejected.append({"filename": file.filename, "error": "این فرمت پشتیبانی نمی‌شود"})
+            continue
+        raw_bytes = file.stream.read()
+        if not raw_bytes:
+            rejected.append({"filename": file.filename, "error": "فایل خالی است"})
+            continue
 
-    raw_bytes = file.stream.read()
-    if not raw_bytes:
-        return jsonify({"error": "فایلی انتخاب نشده است"}), 400
+        asset_id = uuid.uuid4().hex
+        dest = storage.original_path(user["id"], category, asset_id, ext)
+        with open(dest, "wb") as f:
+            f.write(raw_bytes)
+        db.create_asset(
+            asset_id=asset_id,
+            user_id=user["id"],
+            category=category,
+            original_filename=file.filename,
+            file_ext=ext,
+            size_bytes=len(raw_bytes),
+            original_path=dest,
+            status="uploaded",
+        )
+        created.append({"id": asset_id, "filename": file.filename,
+                        "category": category, "status": "uploaded"})
 
-    document_id = uuid.uuid4().hex
+    if created:
+        scan_worker.notify()  # wake the worker so it starts scanning right away
+    return jsonify({"created": created, "rejected": rejected}), (200 if created else 400)
 
-    # Keep the original upload safely, alongside the normalized Markdown derived from it.
-    original_path = os.path.join(DOCS_DIR, f"{document_id}{ext}")
-    with open(original_path, "wb") as f:
-        f.write(raw_bytes)
 
-    try:
-        normalized = ingest.normalize_document(file.filename, io.BytesIO(raw_bytes), ext)
-    except Exception as e:
-        return jsonify({"error": f"خطا در استخراج متن از فایل: {str(e)}"}), 400
+@app.route("/api/gallery/assets", methods=["GET"])
+@auth.subscription_required
+def gallery_assets():
+    """List the user's assets (optionally filtered by ?category=) plus per-category
+    counts for the sidebar. Polled by the gallery UI to track scan progress."""
+    user = auth.current_user()
+    category = request.args.get("category") or None
+    if category in ("all", ""):
+        category = None
 
-    markdown_text = normalized["markdown_text"]
-    if not markdown_text.strip():
-        return jsonify({"error": "متنی از فایل استخراج نشد (ممکن است اسکن‌شده باشد)"}), 400
-
-    md_path, _meta_path = ingest.paths_for(document_id)
-    metadata = {
-        "document_id": document_id,
-        "original_filename": file.filename,
-        "source_file_type": ext.lstrip("."),
-        "original_upload_path": original_path,
-        "normalized_md_path": md_path,
-        "user_id": user["id"],
-        "created_at": ingest.now_iso(),
-        "normalization_version": ingest.NORMALIZATION_VERSION,
-        **normalized["meta"],
-    }
-    ingest.write_normalized(document_id, markdown_text, metadata)
-
-    chunks = chunker.parse_markdown_to_chunks(markdown_text)
-    result = rag.index_chunks(
-        filename=file.filename,
-        chunks=chunks,
-        document_id=document_id,
-        user_id=user["id"],
-        source_file_type=ext.lstrip("."),
-        normalized_md_path=md_path,
-    )
-
-    response = {
-        "status": "ok",
-        "filename": file.filename,
-        "document_id": document_id,
-        "chunks": result["chunks"],
-    }
-    if metadata.get("extraction_quality_warning"):
-        response["warning"] = metadata["extraction_quality_warning"]
-    return jsonify(response)
+    all_rows = db.list_assets(user["id"])
+    counts = {}
+    for a in all_rows:
+        counts[a["category"]] = counts.get(a["category"], 0) + 1
+    rows = all_rows if category is None else [a for a in all_rows if a["category"] == category]
+    return jsonify({
+        "assets": [_asset_to_json(a) for a in rows],
+        "counts": counts,
+        "total": len(all_rows),
+    })
 
 
 @app.route("/api/ask", methods=["POST"])
@@ -379,5 +535,6 @@ def admin_stats():
 
 
 if __name__ == "__main__":
-    debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"
-    app.run(debug=debug_mode, port=5000)
+    # The scan worker is already started at import time above (so serve.py gets it
+    # too); here we just run the dev server.
+    app.run(debug=_DEBUG, port=5000)

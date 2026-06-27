@@ -4,14 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>دستیار اسناد</title>
+<script>(function(){try{var t=localStorage.getItem('theme');if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 <link rel="stylesheet" href="styles.css">
 <style>
   /* Page is full-width with a soft tinted backdrop for depth */
   body { background:
-      radial-gradient(1200px 600px at 100% -10%, #e0e7ff 0%, transparent 55%),
-      radial-gradient(1000px 500px at 0% 0%, #ede9fe 0%, transparent 50%),
+      radial-gradient(1200px 600px at 100% -10%, var(--glow-1) 0%, transparent 55%),
+      radial-gradient(1000px 500px at 0% 0%, var(--glow-2) 0%, transparent 50%),
       var(--bg); }
-  .topbar { background: rgba(255,255,255,0.85); backdrop-filter: blur(10px); }
+  .topbar { background: color-mix(in srgb, var(--surface) 85%, transparent); backdrop-filter: blur(10px); }
   .topbar .topbar-inner { max-width: none; padding-inline: var(--space-8); }
 
   .app-shell { padding: var(--space-6) var(--space-8) var(--space-10); }
@@ -78,7 +79,7 @@
   /* Chat workspace (main column) */
   .workspace { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); display: flex; flex-direction: column; overflow: hidden; min-height: calc(100dvh - 132px); }
   .workspace-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--border); background: linear-gradient(180deg, var(--surface-2), var(--surface)); }
-  .workspace-head .wh-icon { width: 40px; height: 40px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--primary), #7c3aed); color: #fff; box-shadow: var(--shadow-sm); flex-shrink: 0; }
+  .workspace-head .wh-icon { width: 40px; height: 40px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; background: var(--gradient-brand); color: #fff; box-shadow: var(--shadow-sm); flex-shrink: 0; }
   .workspace-head .wh-icon svg { width: 20px; height: 20px; }
   .workspace-head h2 { font-size: var(--text-base); }
   .workspace-head p { font-size: var(--text-xs); color: var(--muted-foreground); margin-top: 2px; }
@@ -87,7 +88,7 @@
   .messages { flex: 1; overflow-y: auto; padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-4); width: 100%; max-width: 880px; margin-inline: auto; }
 
   .empty-chat { margin: auto; text-align: center; max-width: 460px; padding: var(--space-8) var(--space-4); }
-  .empty-art { width: 76px; height: 76px; margin: 0 auto var(--space-5); border-radius: 22px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, var(--primary), #7c3aed); color: #fff; box-shadow: 0 14px 34px rgba(37,99,235,0.35); }
+  .empty-art { width: 76px; height: 76px; margin: 0 auto var(--space-5); border-radius: 22px; display: flex; align-items: center; justify-content: center; background: var(--gradient-brand); color: #fff; box-shadow: var(--shadow-lg); }
   .empty-art svg { width: 34px; height: 34px; }
   .empty-chat h3 { font-weight: 700; font-size: var(--text-xl); }
   .empty-chat p { color: var(--muted-foreground); margin-top: var(--space-2); }
@@ -126,10 +127,14 @@
       دستیار اسناد
     </div>
     <div class="topbar-actions">
-      <span class="user-chip">
+      <a href="/profile.html" class="user-chip" style="text-decoration:none;" title="پروفایل و حساب کاربری">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         <span id="userInfo"></span>
-      </span>
+      </a>
+      <button class="icon-btn" data-theme-toggle onclick="toggleTheme()" title="حالت روشن/تاریک">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        <svg class="icon-moon" style="display:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
       <a href="/admin.html" class="btn btn-secondary btn-sm" id="adminLink" style="display:none;">پنل ادمین</a>
       <button class="btn btn-ghost btn-sm" onclick="logout()">خروج</button>
     </div>
@@ -182,6 +187,17 @@
             <select class="select" id="docSelect" disabled></select>
             <div class="doc-list" id="docList"></div>
           </div>
+        </div>
+
+        <!-- Active feature: file gallery (new page) -->
+        <div class="nav-item">
+          <a class="nav-row" href="/gallery.html" style="text-decoration:none;">
+            <span class="nav-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            </span>
+            <span class="nav-label">گالری فایل‌ها</span>
+            <svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </a>
         </div>
 
         <!-- Placeholder features: not implemented yet -->
@@ -338,7 +354,7 @@ async function checkAuth() {
   const res = await fetch('/api/auth/me');
   const data = await res.json();
   if (!data.logged_in) { window.location.href = '/login.html'; return false; }
-  document.getElementById('userInfo').textContent = data.phone;
+  document.getElementById('userInfo').textContent = data.name || data.phone;
   if (data.is_admin) document.getElementById('adminLink').style.display = 'inline-flex';
 
   if (data.has_subscription) {
@@ -406,22 +422,50 @@ async function uploadFile() {
   const input = document.getElementById('fileInput');
   const status = document.getElementById('status');
   if (!input.files.length) return;
+  const file = input.files[0];
   const formData = new FormData();
-  formData.append('file', input.files[0]);
-  status.innerHTML = '<span class="spinner"></span> در حال پردازش...';
+  formData.append('file', file);
+  status.innerHTML = '<span class="spinner"></span> در حال آپلود...';
   try {
-    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const res = await fetch('/api/gallery/upload', { method: 'POST', body: formData });
     const data = await res.json();
-    if (res.ok) {
-      status.innerHTML = `<span class="badge badge-success">آماده شد</span> «${data.filename}» با ${data.chunks.toLocaleString('fa-IR')} بخش اضافه شد.`;
-      await refreshDocuments(data.document_id);
+    if (res.ok && (data.created || []).length) {
+      // Upload is fast; the actual scan/index runs in the background. Poll until ready.
+      const asset = data.created[0];
+      status.innerHTML = '<span class="spinner"></span> فایل دریافت شد و در حال اسکن است...';
+      pollForScan(asset.id, file.name, status);
     } else {
-      status.innerHTML = `<span class="alert alert-danger" style="display:block;">${data.error}</span>`;
+      const err = (data.rejected && data.rejected[0] && data.rejected[0].error) || data.error || 'خطا در آپلود فایل';
+      status.innerHTML = `<span class="alert alert-danger" style="display:block;">${err}</span>`;
     }
   } catch (e) {
     status.innerHTML = `<span class="alert alert-danger" style="display:block;">خطا در ارتباط با سرور.</span>`;
   }
   input.value = '';
+}
+
+function pollForScan(assetId, filename, status, attempts = 0) {
+  // The background worker normalizes + indexes the file; poll its asset status
+  // until it becomes 'scanned' (ready) or 'failed'. ~150 * 3s ≈ 7.5min ceiling.
+  setTimeout(async () => {
+    try {
+      const res = await fetch('/api/gallery/assets?category=text');
+      const data = await res.json();
+      const a = (data.assets || []).find(x => x.id === assetId);
+      if (a && a.status === 'scanned') {
+        status.innerHTML = `<span class="badge badge-success">آماده شد</span> «${filename}»` +
+          (a.chunk_count ? ` با ${a.chunk_count.toLocaleString('fa-IR')} بخش` : '') + ` اضافه شد.`;
+        await refreshDocuments(assetId);
+        return;
+      }
+      if (a && a.status === 'failed') {
+        status.innerHTML = `<span class="alert alert-danger" style="display:block;">خطا در اسکن «${filename}»: ${a.scan_error || ''}</span>`;
+        return;
+      }
+    } catch (e) { /* transient: keep polling */ }
+    if (attempts < 150) pollForScan(assetId, filename, status, attempts + 1);
+    else status.innerHTML = `<span class="alert alert-warning" style="display:block;">اسکن طول کشید؛ کمی بعد فهرست «اسناد من» را بررسی کنید.</span>`;
+  }, 3000);
 }
 
 function addMessage(role, html) {
@@ -492,6 +536,7 @@ if (params.get('payment') === 'failed') alert('پرداخت ناموفق بود.
 
 checkAuth().then(ok => { if (ok) refreshDocuments(); });
 </script>
+<script src="theme.js"></script>
 
 </body>
 </html>

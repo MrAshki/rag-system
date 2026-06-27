@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ثبت‌نام · دستیار اسناد</title>
+<script>(function(){try{var t=localStorage.getItem('theme');if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+<link rel="stylesheet" href="styles.css">
+<style>
+  .auth-wrap {
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-6) var(--space-4);
+  }
+  .auth-card { width: 100%; max-width: 440px; }
+  .auth-brand {
+    display: flex; flex-direction: column; align-items: center;
+    gap: var(--space-3); margin-bottom: var(--space-6);
+  }
+  .auth-brand .logo {
+    width: 52px; height: 52px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--primary-soft); color: var(--primary); border-radius: var(--radius);
+  }
+  .auth-brand .logo svg { width: 28px; height: 28px; }
+  .auth-brand h1 { font-size: var(--text-xl); }
+  .step-hint { font-size: var(--text-sm); color: var(--muted-foreground); margin-bottom: var(--space-5); }
+  .auth-foot { text-align: center; margin-top: var(--space-5); font-size: var(--text-sm); color: var(--muted-foreground); }
+  .form-row { display: flex; gap: var(--space-3); }
+  .form-row > div { flex: 1; }
+  .field { margin-bottom: var(--space-4); }
+  .dob-row { display: grid; grid-template-columns: 1.2fr 1.4fr 1fr; gap: var(--space-2); }
+  .sms-row { display: flex; gap: var(--space-2); align-items: flex-end; }
+  .sms-row .input { margin-bottom: 0; }
+  .sms-row .btn { flex-shrink: 0; white-space: nowrap; }
+  .verified-tag { display: inline-flex; align-items: center; gap: 6px; color: var(--success); font-size: var(--text-sm); font-weight: 600; }
+  .verified-tag svg { width: 16px; height: 16px; }
+  fieldset { border: none; padding: 0; margin: 0; }
+  fieldset:disabled { opacity: 0.45; }
+</style>
+</head>
+<body>
+
+<button class="icon-btn" data-theme-toggle onclick="toggleTheme()" title="حالت روشن/تاریک" style="position:fixed; top:16px; inset-inline-start:16px; z-index:50;">
+  <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+  <svg class="icon-moon" style="display:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h3"/></svg>
+      </div>
+      <h1>ساخت حساب کاربری</h1>
+    </div>
+
+    <div class="card">
+      <!-- Step 1: phone + send SMS -->
+      <div class="field">
+        <label class="field-label" for="phone">شماره موبایل</label>
+        <input class="input" type="tel" id="phone" inputmode="numeric" placeholder="09xxxxxxxxx" autocomplete="tel">
+      </div>
+
+      <!-- Step 2: code field + send-SMS button (revealed-as-disabled until phone entered) -->
+      <div class="field" id="codeField">
+        <label class="field-label" for="code">کد تأیید پیامک</label>
+        <div class="sms-row">
+          <input class="input" type="text" id="code" inputmode="numeric" maxlength="6" placeholder="کد ۶ رقمی" autocomplete="one-time-code" disabled>
+          <button class="btn btn-secondary" id="sendBtn" onclick="sendSms()">ارسال پیامک</button>
+        </div>
+        <div id="codeActions" style="display:none; margin-top:var(--space-3);">
+          <button class="btn btn-primary btn-block" id="verifyBtn" onclick="verifyCode()">تأیید کد</button>
+        </div>
+        <div id="verifiedTag" class="verified-tag" style="display:none; margin-top:var(--space-3);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          شماره تأیید شد
+        </div>
+      </div>
+
+      <!-- Step 3: account fields (disabled until phone verified) -->
+      <fieldset id="profileFields" disabled>
+        <div class="qa-divider" style="height:1px; background:var(--border); margin:var(--space-5) 0;"></div>
+        <p class="step-hint">اطلاعات حساب خود را تکمیل کنید.</p>
+        <div class="form-row">
+          <div class="field">
+            <label class="field-label" for="firstName">نام</label>
+            <input class="input" type="text" id="firstName" autocomplete="given-name">
+          </div>
+          <div class="field">
+            <label class="field-label" for="lastName">نام خانوادگی</label>
+            <input class="input" type="text" id="lastName" autocomplete="family-name">
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label">تاریخ تولد (شمسی)</label>
+          <div class="dob-row">
+            <select class="select" id="dobYear"></select>
+            <select class="select" id="dobMonth"></select>
+            <select class="select" id="dobDay"></select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="email">ایمیل</label>
+          <input class="input" type="email" id="email" placeholder="you@example.com" autocomplete="email">
+        </div>
+
+        <div class="form-row">
+          <div class="field">
+            <label class="field-label" for="password">رمز عبور</label>
+            <input class="input" type="password" id="password" autocomplete="new-password" placeholder="حداقل ۶ کاراکتر">
+          </div>
+          <div class="field">
+            <label class="field-label" for="password2">تکرار رمز عبور</label>
+            <input class="input" type="password" id="password2" autocomplete="new-password">
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-block" id="createBtn" onclick="createAccount()">ساخت حساب</button>
+      </fieldset>
+
+      <div id="msg" style="margin-top:var(--space-4);"></div>
+    </div>
+
+    <div class="auth-foot">
+      قبلاً ثبت‌نام کرده‌اید؟ <a href="/login.html">وارد شوید</a>
+    </div>
+  </div>
+</div>
+
+<script src="jalali.js"></script>
+<script>
+let phoneVerified = false;
+
+const phoneEl = document.getElementById('phone');
+const codeEl = document.getElementById('code');
+
+function showMsg(text, type) {
+  const msg = document.getElementById('msg');
+  msg.innerHTML = text ? `<div class="alert alert-${type}">${text}</div>` : '';
+}
+
+function setLoading(btnId, loading, label) {
+  const btn = document.getElementById(btnId);
+  btn.disabled = loading;
+  btn.innerHTML = loading ? '<span class="spinner"></span> صبر کنید' : label;
+}
+
+fillJalaliSelects(document.getElementById('dobYear'), document.getElementById('dobMonth'), document.getElementById('dobDay'));
+
+// Once the phone has been verified, editing it would invalidate that proof, so
+// re-lock the flow and make the user verify the new number.
+phoneEl.addEventListener('input', () => {
+  if (phoneVerified) {
+    phoneVerified = false;
+    document.getElementById('profileFields').disabled = true;
+    document.getElementById('verifiedTag').style.display = 'none';
+    document.getElementById('codeActions').style.display = 'none';
+    codeEl.disabled = true;
+    codeEl.value = '';
+  }
+});
+
+async function sendSms() {
+  const phone = phoneEl.value.trim();
+  showMsg('');
+  setLoading('sendBtn', true);
+  try {
+    const res = await fetch('/api/auth/register/send-otp', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      codeEl.disabled = false;
+      codeEl.focus();
+      document.getElementById('codeActions').style.display = 'block';
+      showMsg('کد تأیید ارسال شد. آن را وارد کنید.', 'success');
+    } else {
+      showMsg(data.error || 'خطا در ارسال پیامک', 'danger');
+    }
+  } catch (e) {
+    showMsg('خطا در ارتباط با سرور.', 'danger');
+  } finally {
+    setLoading('sendBtn', false, 'ارسال مجدد');
+  }
+}
+
+async function verifyCode() {
+  const phone = phoneEl.value.trim();
+  const code = codeEl.value.trim();
+  showMsg('');
+  setLoading('verifyBtn', true);
+  try {
+    const res = await fetch('/api/auth/register/verify-otp', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, code })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      phoneVerified = true;
+      phoneEl.readOnly = true;
+      codeEl.disabled = true;
+      document.getElementById('sendBtn').disabled = true;
+      document.getElementById('codeActions').style.display = 'none';
+      document.getElementById('verifiedTag').style.display = 'inline-flex';
+      document.getElementById('profileFields').disabled = false;
+      document.getElementById('firstName').focus();
+      showMsg('');
+    } else {
+      showMsg(data.error || 'کد نامعتبر است', 'danger');
+      setLoading('verifyBtn', false, 'تأیید کد');
+    }
+  } catch (e) {
+    showMsg('خطا در ارتباط با سرور.', 'danger');
+    setLoading('verifyBtn', false, 'تأیید کد');
+  }
+}
+
+async function createAccount() {
+  if (!phoneVerified) { showMsg('ابتدا شماره موبایل را تأیید کنید.', 'danger'); return; }
+  const firstName = document.getElementById('firstName').value.trim();
+  const lastName = document.getElementById('lastName').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const password2 = document.getElementById('password2').value;
+
+  if (!firstName || !lastName) { showMsg('نام و نام خانوادگی را وارد کنید.', 'danger'); return; }
+  if (!email) { showMsg('ایمیل را وارد کنید.', 'danger'); return; }
+  if (password.length < 6) { showMsg('رمز عبور باید حداقل ۶ کاراکتر باشد.', 'danger'); return; }
+  if (password !== password2) { showMsg('رمز عبور و تکرار آن یکسان نیستند.', 'danger'); return; }
+
+  const birthDate = jalaliSelectsToISO(
+    document.getElementById('dobYear'),
+    document.getElementById('dobMonth'),
+    document.getElementById('dobDay'));
+  if (birthDate === null) { showMsg('تاریخ تولد را کامل انتخاب کنید.', 'danger'); return; }
+  if (birthDate === undefined) { showMsg('تاریخ تولد انتخاب‌شده معتبر نیست.', 'danger'); return; }
+
+  showMsg('');
+  setLoading('createBtn', true);
+  try {
+    const res = await fetch('/api/auth/register/complete', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        phone: phoneEl.value.trim(),
+        first_name: firstName, last_name: lastName,
+        email, birth_date: birthDate, password
+      })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      window.location.href = data.is_admin ? '/admin.html' : '/';
+    } else {
+      showMsg(data.error || 'خطا در ساخت حساب', 'danger');
+      setLoading('createBtn', false, 'ساخت حساب');
+    }
+  } catch (e) {
+    showMsg('خطا در ارتباط با سرور.', 'danger');
+    setLoading('createBtn', false, 'ساخت حساب');
+  }
+}
+
+codeEl.addEventListener('keydown', e => { if (e.key === 'Enter' && !codeEl.disabled) verifyCode(); });
+</script>
+<script src="theme.js"></script>
+
+</body>
+</html>

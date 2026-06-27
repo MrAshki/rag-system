@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ورود · دستیار اسناد</title>
+<script>(function(){try{var t=localStorage.getItem('theme');if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 <link rel="stylesheet" href="styles.css">
 <style>
   .auth-wrap {
@@ -31,9 +32,16 @@
   .auth-brand h1 { font-size: var(--text-xl); }
   .step-hint { font-size: var(--text-sm); color: var(--muted-foreground); margin-bottom: var(--space-5); text-align: center; }
   .resend { text-align: center; margin-top: var(--space-4); font-size: var(--text-sm); }
+  .auth-tabs { display: flex; margin-bottom: var(--space-5); width: 100%; }
+  .auth-foot { text-align: center; margin-top: var(--space-5); font-size: var(--text-sm); color: var(--muted-foreground); }
 </style>
 </head>
 <body>
+
+<button class="icon-btn" data-theme-toggle onclick="toggleTheme()" title="حالت روشن/تاریک" style="position:fixed; top:16px; inset-inline-start:16px; z-index:50;">
+  <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+  <svg class="icon-moon" style="display:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>
 
 <div class="auth-wrap">
   <div class="auth-card">
@@ -45,26 +53,46 @@
     </div>
 
     <div class="card">
-      <div id="step-phone">
-        <h2 style="font-size:var(--text-lg); margin-bottom:var(--space-2);">ورود با شماره موبایل</h2>
-        <p class="step-hint">شماره موبایل خود را وارد کنید تا کد تأیید برایتان ارسال شود.</p>
-        <label class="field-label" for="phone">شماره موبایل</label>
-        <input class="input" type="tel" id="phone" inputmode="numeric" placeholder="09xxxxxxxxx" autocomplete="tel" style="margin-bottom:var(--space-4);">
-        <button class="btn btn-primary btn-block" id="phoneBtn" onclick="requestOtp()">دریافت کد تأیید</button>
+      <div class="segmented auth-tabs">
+        <label style="flex:1; text-align:center; padding:0;"><input type="radio" name="mode" value="phone" checked onchange="switchMode('phone')"><span style="display:block;">موبایل</span></label>
+        <label style="flex:1; text-align:center; padding:0;"><input type="radio" name="mode" value="email" onchange="switchMode('email')"><span style="display:block;">ایمیل</span></label>
       </div>
 
-      <div id="step-code" style="display:none;">
-        <h2 style="font-size:var(--text-lg); margin-bottom:var(--space-2);">کد تأیید</h2>
-        <p class="step-hint">کد ارسال‌شده به <span id="phoneEcho" style="font-weight:600; color:var(--foreground);"></span> را وارد کنید.</p>
-        <label class="field-label" for="code">کد ۶ رقمی</label>
-        <input class="input" type="text" id="code" inputmode="numeric" maxlength="6" placeholder="------" autocomplete="one-time-code" style="margin-bottom:var(--space-4); letter-spacing:6px; text-align:center; font-size:var(--text-xl); font-weight:600;">
-        <button class="btn btn-primary btn-block" id="codeBtn" onclick="verifyOtp()">ورود</button>
-        <div class="resend">
-          <a href="#" onclick="backToPhone(event)">تغییر شماره</a>
+      <!-- Phone + OTP -->
+      <div id="mode-phone">
+        <div id="step-phone">
+          <p class="step-hint">شماره موبایل خود را وارد کنید تا کد تأیید برایتان ارسال شود.</p>
+          <label class="field-label" for="phone">شماره موبایل</label>
+          <input class="input" type="tel" id="phone" inputmode="numeric" placeholder="09xxxxxxxxx" autocomplete="tel" style="margin-bottom:var(--space-4);">
+          <button class="btn btn-primary btn-block" id="phoneBtn" onclick="requestOtp()">دریافت کد تأیید</button>
+        </div>
+
+        <div id="step-code" style="display:none;">
+          <p class="step-hint">کد ارسال‌شده به <span id="phoneEcho" style="font-weight:600; color:var(--foreground);"></span> را وارد کنید.</p>
+          <label class="field-label" for="code">کد ۶ رقمی</label>
+          <input class="input" type="text" id="code" inputmode="numeric" maxlength="6" placeholder="------" autocomplete="one-time-code" style="margin-bottom:var(--space-4); letter-spacing:6px; text-align:center; font-size:var(--text-xl); font-weight:600;">
+          <button class="btn btn-primary btn-block" id="codeBtn" onclick="verifyOtp()">ورود</button>
+          <div class="resend">
+            <a href="#" onclick="backToPhone(event)">تغییر شماره</a>
+          </div>
         </div>
       </div>
 
+      <!-- Email + password -->
+      <div id="mode-email" style="display:none;">
+        <p class="step-hint">با ایمیل و رمز عبوری که هنگام ثبت‌نام انتخاب کرده‌اید وارد شوید.</p>
+        <label class="field-label" for="email">ایمیل</label>
+        <input class="input" type="email" id="email" placeholder="you@example.com" autocomplete="email" style="margin-bottom:var(--space-4);">
+        <label class="field-label" for="password">رمز عبور</label>
+        <input class="input" type="password" id="password" autocomplete="current-password" style="margin-bottom:var(--space-4);">
+        <button class="btn btn-primary btn-block" id="emailBtn" onclick="loginEmail()">ورود</button>
+      </div>
+
       <div id="msg" style="margin-top:var(--space-4);"></div>
+    </div>
+
+    <div class="auth-foot">
+      حساب کاربری ندارید؟ <a href="/register.html">ثبت‌نام کنید</a>
     </div>
   </div>
 </div>
@@ -74,14 +102,19 @@ let phoneValue = "";
 
 function showMsg(text, type) {
   const msg = document.getElementById('msg');
-  if (!text) { msg.innerHTML = ''; return; }
-  msg.innerHTML = `<div class="alert alert-${type}">${text}</div>`;
+  msg.innerHTML = text ? `<div class="alert alert-${type}">${text}</div>` : '';
 }
 
 function setLoading(btnId, loading, label) {
   const btn = document.getElementById(btnId);
   btn.disabled = loading;
   btn.innerHTML = loading ? '<span class="spinner"></span> لطفاً صبر کنید' : label;
+}
+
+function switchMode(mode) {
+  showMsg('');
+  document.getElementById('mode-phone').style.display = mode === 'phone' ? 'block' : 'none';
+  document.getElementById('mode-email').style.display = mode === 'email' ? 'block' : 'none';
 }
 
 function backToPhone(e) {
@@ -140,9 +173,34 @@ async function verifyOtp() {
   }
 }
 
+async function loginEmail() {
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  showMsg('');
+  setLoading('emailBtn', true);
+  try {
+    const res = await fetch('/api/auth/login-email', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      window.location.href = data.is_admin ? '/admin.html' : '/';
+    } else {
+      showMsg(data.error || 'ورود ناموفق بود', 'danger');
+      setLoading('emailBtn', false, 'ورود');
+    }
+  } catch (e) {
+    showMsg('خطا در ارتباط با سرور.', 'danger');
+    setLoading('emailBtn', false, 'ورود');
+  }
+}
+
 document.getElementById('phone').addEventListener('keydown', e => { if (e.key === 'Enter') requestOtp(); });
 document.getElementById('code').addEventListener('keydown', e => { if (e.key === 'Enter') verifyOtp(); });
+document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') loginEmail(); });
 </script>
+<script src="theme.js"></script>
 
 </body>
 </html>

@@ -27,6 +27,10 @@ app_data.sqlite3
 docs/*
 !docs/.gitkeep
 
+# Per-user file store: originals + normalized markdown + metadata (runtime data).
+# Replaces the old flat docs/ + converted/ layout; regenerated from uploads.
+storage/
+
 # Manual test inputs — copied book/test files kept local for manual UI testing
 # (copyrighted source, not for distribution). Keep the folder, ignore its contents.
 manual_test_inputs/*

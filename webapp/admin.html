@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>پنل مدیریت · دستیار اسناد</title>
+<script>(function(){try{var t=localStorage.getItem('theme');if(!t){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 <link rel="stylesheet" href="styles.css">
 <style>
   .admin-main { padding-block: var(--space-6); display: flex; flex-direction: column; gap: var(--space-6); }
@@ -22,6 +23,10 @@
       پنل مدیریت
     </div>
     <div class="topbar-actions">
+      <button class="icon-btn" data-theme-toggle onclick="toggleTheme()" title="حالت روشن/تاریک">
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        <svg class="icon-moon" style="display:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
       <a href="/" class="btn btn-secondary btn-sm">بازگشت به برنامه</a>
       <button class="btn btn-ghost btn-sm" onclick="logout()">خروج</button>
     </div>
@@ -193,6 +198,7 @@ async function logout() {
 
 loadAll();
 </script>
+<script src="theme.js"></script>
 
 </body>
 </html>

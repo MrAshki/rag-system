@@ -11,6 +11,18 @@ ollama==0.6.2
 pypdf==6.13.3
 python-docx==1.2.0
 
+# OCR fallback for PDFs with a missing or garbled (broken-font) text layer.
+# pypdfium2 renders pages to images (pip-only, bundles PDFium -- no Poppler).
+# pytesseract drives the Tesseract OCR engine; Pillow holds the rendered images.
+pypdfium2==5.10.1
+pytesseract==0.3.13
+Pillow==12.2.0
+# NOTE: pytesseract needs the Tesseract SYSTEM binary + the Persian language pack,
+# which are NOT pip packages:
+#   Windows: install the UB-Mannheim build and tick the "Persian" language data,
+#            then add it to PATH (or set TESSERACT_CMD in .env).
+#   Linux:   apt-get install -y tesseract-ocr tesseract-ocr-fas
+
 # Payments / misc
 requests==2.34.2
 python-dotenv==1.2.2

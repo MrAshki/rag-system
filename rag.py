@@ -12,6 +12,7 @@ import chromadb
 from chromadb.utils import embedding_functions
 import ollama
 import sys
+import threading
 from typing import List, Dict, Optional
 
 from document_pipeline import chunker
@@ -92,6 +93,13 @@ except Exception as e:
     print(f"Error initializing clients: {str(e)}")
     sys.exit(1)
 
+# Serializes access to the Chroma collection (which embeds via bge-m3 under the
+# hood). The background scan worker indexes chunks on one thread while user
+# queries embed on request threads; a single lock keeps embedding/Chroma calls
+# from overlapping. Held only around individual collection calls (per-chunk on
+# the index path), so queries can still interleave between a document's chunks.
+_chroma_lock = threading.Lock()
+
 # Startup banner so a running server proves which code/prompt it loaded.
 print(
     f"[rag] loaded module={os.path.abspath(__file__)} "
@@ -123,16 +131,17 @@ def index_document(filename: str, text: str, document_id: Optional[str] = None, 
     chunks = split_text(text)
     print(f"Indexing '{filename}' ({len(chunks)} chunks) on {EMBEDDING_DEVICE} for user_id={user_id}...", flush=True)
     for i, chunk in enumerate(chunks):
-        collection.upsert(
-            ids=[f"{document_id}_chunk{i+1}"],
-            documents=[chunk],
-            metadatas=[{
-                "document_id": document_id,
-                "source": filename,
-                "chunk": i + 1,
-                "user_id": user_id,
-            }],
-        )
+        with _chroma_lock:
+            collection.upsert(
+                ids=[f"{document_id}_chunk{i+1}"],
+                documents=[chunk],
+                metadatas=[{
+                    "document_id": document_id,
+                    "source": filename,
+                    "chunk": i + 1,
+                    "user_id": user_id,
+                }],
+            )
         if (i + 1) % 50 == 0 or (i + 1) == len(chunks):
             print(f"  {filename}: {i+1}/{len(chunks)} chunks indexed", flush=True)
     return {"document_id": document_id, "chunks": len(chunks)}
@@ -168,11 +177,12 @@ def index_chunks(
             "char_end": ch.get("char_end"),
         }
         metadata = {k: v for k, v in metadata.items() if v is not None}
-        collection.upsert(
-            ids=[f"{document_id}_chunk{ch['chunk_index']}"],
-            documents=[chunker.build_embedded_text(ch)],
-            metadatas=[metadata],
-        )
+        with _chroma_lock:
+            collection.upsert(
+                ids=[f"{document_id}_chunk{ch['chunk_index']}"],
+                documents=[chunker.build_embedded_text(ch)],
+                metadatas=[metadata],
+            )
         if (i + 1) % 50 == 0 or (i + 1) == len(chunks):
             print(f"  {filename}: {i+1}/{len(chunks)} chunks indexed", flush=True)
     return {"document_id": document_id, "chunks": len(chunks)}
@@ -182,7 +192,8 @@ def list_documents(user_id: int = None) -> List[Dict]:
     """Return the distinct indexed documents as {document_id, source} for UI display.
     Scoped to a single user's documents unless user_id is None (admin/internal use)."""
     where = {"user_id": user_id} if user_id is not None else None
-    data = collection.get(where=where, include=["metadatas"])
+    with _chroma_lock:
+        data = collection.get(where=where, include=["metadatas"])
     seen = {}
     for m in data["metadatas"]:
         if m and m.get("document_id") and m["document_id"] not in seen:
@@ -273,12 +284,13 @@ def query_documents(question: str, n_results: int = 5, document_id: str = None, 
         else:
             where = {"$and": conditions}
 
-        results = collection.query(
-            query_texts=[question],
-            n_results=n_results,
-            where=where,
-            include=["documents", "metadatas"],
-        )
+        with _chroma_lock:
+            results = collection.query(
+                query_texts=[question],
+                n_results=n_results,
+                where=where,
+                include=["documents", "metadatas"],
+            )
         chunks = []
         docs = results["documents"][0] if results["documents"] else []
         metas = results["metadatas"][0] if results["metadatas"] else []

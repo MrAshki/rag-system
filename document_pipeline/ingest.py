@@ -10,10 +10,11 @@ lists are detected both from explicit markers and from runs of unmarked short
 lines. Page boundaries are kept for PDFs. Falls back to plain paragraph blocks
 when no structure is found, and never hard-splits a paragraph's concepts.
 """
+import io
 import json
 import os
 import re
-import shutil
+import tempfile
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
@@ -21,10 +22,10 @@ from pypdf import PdfReader
 from docx import Document as DocxDocument
 
 from document_pipeline import llm_normalize
+from document_pipeline import ocr
+import storage
 
 NORMALIZATION_VERSION = "v2"
-CONVERTED_DIR = "./converted"
-os.makedirs(CONVERTED_DIR, exist_ok=True)
 
 # Step 2.5: optional LLM-assisted relabeling, off by default.
 ENABLE_LLM_NORMALIZATION = os.getenv("ENABLE_LLM_NORMALIZATION", "false").lower() == "true"
@@ -56,6 +57,82 @@ MIN_IMPLICIT_LIST_RUN = 3
 
 LOW_TEXT_DENSITY_CHARS_PER_PAGE = 50
 OCR_REQUIRED_CHARS_PER_PAGE = 5
+
+# --- Broken-font ("garbled") PDF detection -------------------------------------
+# Some PDFs embed a font with no usable ToUnicode/CMap, so page.extract_text()
+# returns mojibake even though the page is text-DENSE -- the density/heading
+# heuristics above never catch it, and the garbage gets indexed. We detect such
+# text directly (per page) and route those pages through OCR instead. Two
+# independent signals, either of which flags a page as garbled:
+#   1. stopword hit-rate: real Persian prose is saturated with function words
+#      (و/در/به/که/است/...); mojibake has almost none.
+#   2. diacritic rate: broken-CMap mojibake is loaded with harakat; normal
+#      Persian prose has almost none.
+# Thresholds calibrated on real garbled (takbook) vs clean (QuestLine) PDFs.
+PAGE_OCR_MIN_CHARS = 5              # near-empty page => scanned/image-only => OCR
+GARBLE_MIN_TOKENS = 10             # need enough words on the page to judge it
+GARBLE_STOPWORD_RATE_MIN = 0.03    # below this share of stopwords => garbled
+GARBLE_DIACRITIC_RATE_MAX = 0.10   # above this share of diacritics => garbled
+GARBLE_MIN_LETTERS_FOR_DIAC = 30   # don't judge diacritic rate on tiny samples
+
+# Ultra-common Persian function words: present in essentially any real Persian
+# text, absent from broken-font mojibake.
+_FA_STOPWORDS = frozenset({
+    "و", "در", "به", "از", "که", "این", "را", "با", "است", "برای", "آن", "یک",
+    "تا", "هم", "یا", "اگر", "بر", "هر", "خود", "ما", "شما", "او", "چه", "کرد",
+    "شده", "نیز", "اما", "ها", "های", "باید", "هست", "نیست", "دارد", "دیگر",
+    "روی", "بین", "پس", "چون", "مثل", "حال", "بعد", "قبل", "می", "شد", "بود",
+    "ای", "هایی", "کنید", "کنم", "شود", "کند", "آنها", "همه", "تو", "من", "نه",
+})
+
+# Arabic combining marks (harakat/tashkil/Quranic) + tatweel. Rare in real
+# Persian prose, abundant in broken-font mojibake.
+_FA_DIACRITICS = frozenset(
+    [chr(c) for c in range(0x064B, 0x0660)]      # fathatan .. (incl. shadda/sukun/hamza marks)
+    + [chr(c) for c in range(0x06D6, 0x06EE)]    # Quranic annotation marks
+    + [chr(0x0670), chr(0x0640)]                 # superscript alef, tatweel
+)
+
+# Normalize Arabic-only letterforms to their Persian equivalents so clean text
+# matches the stopword set reliably (clean Persian sometimes uses Arabic ي/ك/ة).
+_FA_TOKEN_TRANS = {0x0643: 0x06A9, 0x064A: 0x06CC, 0x0649: 0x06CC, 0x0629: 0x0647}
+_FA_TOKEN_STRIP = (
+    " \t\r\n«»،؛:.!؟?()[]{}\"'…-–—_/\\|*•"
+    "‌‍‎‏"
+    "0123456789۰۱۲۳۴۵۶۷۸۹"
+)
+
+
+def _is_arabic_letter(c: str) -> bool:
+    o = ord(c)
+    return (0x0621 <= o <= 0x064A) or (0x0671 <= o <= 0x06D3) or o in (
+        0x06D5, 0x067E, 0x0686, 0x0698, 0x06A9, 0x06AF, 0x06CC
+    )
+
+
+def _norm_fa_token(token: str) -> str:
+    token = token.translate(_FA_TOKEN_TRANS)
+    token = "".join(c for c in token if c not in _FA_DIACRITICS)
+    return token.strip(_FA_TOKEN_STRIP)
+
+
+def _looks_garbled(text: str) -> bool:
+    """Does this Persian text look like broken-font mojibake rather than real
+    prose? See the GARBLE_* constants above for the calibrated heuristic."""
+    if not text:
+        return False
+    letters = sum(1 for c in text if _is_arabic_letter(c))
+    if letters >= GARBLE_MIN_LETTERS_FOR_DIAC:
+        diac = sum(1 for c in text if c in _FA_DIACRITICS)
+        if diac / letters > GARBLE_DIACRITIC_RATE_MAX:
+            return True
+    tokens = [t for t in (_norm_fa_token(x) for x in text.split()) if t]
+    if len(tokens) >= GARBLE_MIN_TOKENS:
+        hits = sum(1 for t in tokens if t in _FA_STOPWORDS)
+        if hits / len(tokens) < GARBLE_STOPWORD_RATE_MIN:
+            return True
+    return False
+
 
 _DOCX_LIST_PREFIXES = ("list bullet", "list number", "list paragraph")
 
@@ -493,35 +570,60 @@ def normalize_docx(file_stream, force_llm_normalization: bool = False) -> Dict:
 # PDF
 # ---------------------------------------------------------------------------
 
-def _ocr_backend_available() -> Tuple[bool, str]:
-    """Read-only check (no installs) for a usable OCR backend. Used only when
-    ENABLE_OCR_FALLBACK is explicitly turned on; otherwise never invoked."""
-    if shutil.which("tesseract") is None:
-        return False, "tesseract executable not found on PATH"
-    try:
-        import pytesseract  # noqa: F401
-    except ImportError:
-        return False, "pytesseract not installed"
-    try:
-        import pdf2image  # noqa: F401
-    except ImportError:
-        return False, "pdf2image not installed"
-    return True, ""
-
-
-def normalize_pdf(file_stream, enable_ocr_fallback: Optional[bool] = None, force_llm_normalization: bool = False) -> Dict:
+def normalize_pdf(file_stream, ocr_artifact_dir: Optional[str] = None,
+                  enable_ocr_fallback: Optional[bool] = None,
+                  force_llm_normalization: bool = False) -> Dict:
+    """Normalize a PDF to Markdown. Pages whose text layer is missing/near-empty
+    (scanned) or garbled (broken embedded font) are re-read via OCR (Tesseract,
+    Persian) instead of indexing the bad text. OCR is gated by ENABLE_OCR_FALLBACK
+    (default on); if a page needs OCR but the backend is unavailable, the result is
+    flagged (meta ocr_status != "applied") so the caller can fail the asset rather
+    than index mojibake. Rendered page images go to ocr_artifact_dir (the asset's
+    ocr/ folder) -- image-processing artifacts kept apart from normalized.md."""
     if enable_ocr_fallback is None:
-        enable_ocr_fallback = os.getenv("ENABLE_OCR_FALLBACK", "false").lower() == "true"
+        enable_ocr_fallback = os.getenv("ENABLE_OCR_FALLBACK", "true").lower() == "true"
 
-    reader = PdfReader(file_stream)
+    pdf_bytes = file_stream.read() if hasattr(file_stream, "read") else file_stream
+    reader = PdfReader(io.BytesIO(pdf_bytes))
     page_count = len(reader.pages)
-    total_chars = 0
+
+    # Phase 1: extract each page's text layer; flag pages that need OCR -- either
+    # near-empty (scanned/image-only) or dense-but-garbled (broken embedded font).
+    page_texts: List[str] = []
+    needs_ocr: List[bool] = []
+    for page in reader.pages:
+        text = page.extract_text() or ""
+        page_texts.append(text)
+        needs_ocr.append(len(text.strip()) < PAGE_OCR_MIN_CHARS or _looks_garbled(text))
+
+    # Phase 2: OCR the flagged pages, replacing their text with the OCR output.
+    ocr_pages_idx = [i for i, flag in enumerate(needs_ocr) if flag]
+    ocr_status = "not_needed"
+    ocr_error: Optional[str] = None
+    ocr_applied_count = 0
+    if ocr_pages_idx:
+        if not enable_ocr_fallback:
+            ocr_status = "disabled"
+        else:
+            available, reason = ocr.availability()
+            if not available:
+                ocr_status, ocr_error = "unavailable", reason
+            else:
+                try:
+                    out_dir = ocr_artifact_dir or tempfile.mkdtemp(prefix="ocr_")
+                    ocr_texts = ocr.ocr_pages(pdf_bytes, ocr_pages_idx, out_dir)
+                    for i, txt in ocr_texts.items():
+                        if txt and txt.strip():
+                            page_texts[i] = txt
+                            ocr_applied_count += 1
+                    ocr_status = "applied"
+                except Exception as e:  # noqa: BLE001 -- surface as failure, don't index garbage
+                    ocr_status, ocr_error = "failed", str(e)
+
+    # Phase 3: build blocks + Markdown from the (possibly OCR-corrected) page text.
     page_blocks_list: List[List[Tuple]] = []
     all_blocks: List[Tuple] = []
-
-    for i, page in enumerate(reader.pages):
-        text = page.extract_text() or ""
-        total_chars += len(text.strip())
+    for i, text in enumerate(page_texts):
         page_blocks = _lines_to_blocks(text, detect_implicit_lists=False)
         if i == 0:
             page_blocks = _promote_title(page_blocks)
@@ -533,9 +635,8 @@ def normalize_pdf(file_stream, enable_ocr_fallback: Optional[bool] = None, force
 
     all_blocks, llm_meta = _maybe_llm_relabel(all_blocks, confidence, force=force_llm_normalization)
     if llm_meta["llm_normalization_used"]:
-        # Split the relabeled flat sequence back into per-page chunks (using
-        # each page's original block count) so page markers stay correctly
-        # interleaved during rendering below.
+        # Split the relabeled flat sequence back into per-page chunks (using each
+        # page's original block count) so page markers stay correctly interleaved.
         lengths = [len(pb) for pb in page_blocks_list]
         page_blocks_list = []
         cursor = 0
@@ -552,64 +653,55 @@ def normalize_pdf(file_stream, enable_ocr_fallback: Optional[bool] = None, force
         if page_md:
             md_blocks.append(page_md)
     markdown_text = "\n\n".join(md_blocks)
+
+    total_chars = sum(len(t.strip()) for t in page_texts)
     avg_chars_per_page = (total_chars / page_count) if page_count else 0
 
-    warning = None
-    ocr_meta = {}
-    if avg_chars_per_page < OCR_REQUIRED_CHARS_PER_PAGE:
+    ocr_required = bool(ocr_pages_idx)
+    if ocr_required and ocr_status != "applied":
+        # Pages needed OCR but it didn't run -> the text we have is bad. Flag it so
+        # the caller fails the asset instead of indexing mojibake.
+        warning = "ocr_required"
+    elif avg_chars_per_page < OCR_REQUIRED_CHARS_PER_PAGE:
         warning = "ocr_required"
     elif avg_chars_per_page < LOW_TEXT_DENSITY_CHARS_PER_PAGE:
         warning = "low_text_density_possible_scanned_pdf"
     elif confidence == "low":
         warning = "weak_structure_no_headings_detected"
-
-    if warning in ("ocr_required", "low_text_density_possible_scanned_pdf"):
-        ocr_meta["ocr_fallback_enabled"] = enable_ocr_fallback
-        if enable_ocr_fallback:
-            available, reason = _ocr_backend_available()
-            ocr_meta["ocr_backend_available"] = available
-            if not available:
-                ocr_meta["ocr_backend_missing_reason"] = reason
-            # Deterministic, no-LLM scaffolding only: actually rendering pages
-            # to images and running tesseract is not implemented here because
-            # no OCR backend is installed locally (see ingest.OCR_SETUP_NOTES).
-            # This flag/path exists so it can be wired up later without
-            # touching the upload route again.
+    else:
+        warning = None
 
     meta = {
-        "extraction_method": "pypdf",
+        "extraction_method": "pypdf+ocr" if ocr_status == "applied" else "pypdf",
         "structure_confidence": confidence,
         "page_count": page_count,
         "heading_count": stats["total"],
         "char_count": len(markdown_text),
         "extraction_quality_warning": warning,
+        "ocr_required": ocr_required,
+        "ocr_status": ocr_status,
+        "ocr_pages_detected": len(ocr_pages_idx),
+        "ocr_pages_applied": ocr_applied_count,
     }
-    meta.update(ocr_meta)
+    if ocr_error:
+        meta["ocr_error"] = ocr_error
     meta.update(llm_meta)
     return {"markdown_text": markdown_text, "meta": meta}
-
-
-OCR_SETUP_NOTES = (
-    "No local OCR backend found (tesseract executable, pytesseract, pdf2image, "
-    "ocrmypdf all absent). Lightest Windows-friendly setup if/when approved: "
-    "1) install the Tesseract-OCR Windows installer (UB-Mannheim build, ~80-100MB, "
-    "includes the 'fas' Persian language pack option) and add it to PATH; "
-    "2) pip install pytesseract (~50KB) + pdf2image (~30KB); "
-    "3) pdf2image additionally needs the Poppler Windows binaries on PATH "
-    "(~10-20MB zip, no installer, just unzip+PATH). Total download ~100-150MB, "
-    "all one-time. Nothing is installed by this module on its own."
-)
 
 
 # ---------------------------------------------------------------------------
 # Dispatch / IO
 # ---------------------------------------------------------------------------
 
-def normalize_document(filename: str, file_stream, ext: str, force_llm_normalization: bool = False) -> Dict:
+def normalize_document(filename: str, file_stream, ext: str,
+                       ocr_artifact_dir: Optional[str] = None,
+                       force_llm_normalization: bool = False) -> Dict:
     """Dispatch by extension. Returns {"markdown_text": str, "meta": {...}}.
-    force_llm_normalization bypasses the structure_confidence trigger (still
-    requires ENABLE_LLM_NORMALIZATION=true to actually call the LLM) -- meant
-    for manual testing on a specific document, not for production traffic."""
+    ocr_artifact_dir (PDF only) is where OCR renders page images when a PDF's text
+    layer is missing/garbled -- pass the asset's ocr/ folder. force_llm_normalization
+    bypasses the structure_confidence trigger (still requires ENABLE_LLM_NORMALIZATION
+    =true to actually call the LLM) -- meant for manual testing on a specific
+    document, not for production traffic."""
     ext = ext.lower()
     if ext == ".txt":
         text = file_stream.read()
@@ -619,16 +711,19 @@ def normalize_document(filename: str, file_stream, ext: str, force_llm_normaliza
     if ext == ".docx":
         return normalize_docx(file_stream, force_llm_normalization=force_llm_normalization)
     if ext == ".pdf":
-        return normalize_pdf(file_stream, force_llm_normalization=force_llm_normalization)
+        return normalize_pdf(file_stream, ocr_artifact_dir=ocr_artifact_dir,
+                             force_llm_normalization=force_llm_normalization)
     raise ValueError(f"Unsupported file type: {ext}")
 
 
-def write_normalized(document_id: str, markdown_text: str, metadata: Dict) -> Tuple[str, str]:
-    """Writes converted/{document_id}.md and .metadata.json. Returns their
-    relative paths. Callers should set metadata["normalized_md_path"] (e.g.
-    via paths_for()) BEFORE calling this, so the field is present in the
-    written JSON, not just in the caller's in-memory dict."""
-    md_path, meta_path = paths_for(document_id)
+def write_normalized(user_id, asset_id: str, markdown_text: str, metadata: Dict,
+                     category: str = "text") -> Tuple[str, str]:
+    """Writes the asset's normalized.md and metadata.json under its per-user
+    storage folder (storage/{user_id}/{category}/{asset_id}/). Returns their
+    paths. Callers should set metadata["normalized_md_path"] (e.g. via
+    paths_for()) BEFORE calling this, so the field is present in the written
+    JSON, not just in the caller's in-memory dict."""
+    md_path, meta_path = paths_for(user_id, asset_id, category)
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(markdown_text)
     with open(meta_path, "w", encoding="utf-8") as f:
@@ -636,10 +731,13 @@ def write_normalized(document_id: str, markdown_text: str, metadata: Dict) -> Tu
     return md_path, meta_path
 
 
-def paths_for(document_id: str) -> Tuple[str, str]:
-    md_path = os.path.join(CONVERTED_DIR, f"{document_id}.md")
-    meta_path = os.path.join(CONVERTED_DIR, f"{document_id}.metadata.json")
-    return md_path, meta_path
+def paths_for(user_id, asset_id: str, category: str = "text") -> Tuple[str, str]:
+    """(normalized_md_path, metadata_path) for an asset, via the storage module
+    (the single source of truth for on-disk layout)."""
+    return (
+        storage.normalized_md_path(user_id, category, asset_id),
+        storage.metadata_path(user_id, category, asset_id),
+    )
 
 
 def now_iso() -> str:
