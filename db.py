@@ -1,4 +1,6 @@
+import json
 import os
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
@@ -102,6 +104,31 @@ CREATE TABLE IF NOT EXISTS assets (
 );
 CREATE INDEX IF NOT EXISTS idx_assets_user   ON assets (user_id, category, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_assets_status ON assets (status);
+
+CREATE TABLE IF NOT EXISTS conversations (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    chat_provider TEXT,
+    chat_model TEXT,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_conversations_user_updated
+    ON conversations (user_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS conversation_messages (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    sources_json TEXT,
+    status TEXT NOT NULL DEFAULT 'complete',
+    stream_status TEXT,
+    created_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_conversation_messages_conversation_created
+    ON conversation_messages (conversation_id, created_at);
 """
 
 
@@ -386,6 +413,144 @@ def list_assets(user_id: int, category: str = None, status: str = None):
             f"SELECT * FROM assets WHERE {' AND '.join(clauses)} ORDER BY created_at DESC",
             tuple(params),
         ).fetchall()
+
+
+# ---- conversations ----
+
+def _encode_sources(sources) -> str:
+    return json.dumps(sources or [], ensure_ascii=False)
+
+
+def create_conversation(user_id: int, title: str = "گفتگوی جدید",
+                        chat_provider: str = None, chat_model: str = None):
+    conversation_id = uuid.uuid4().hex
+    ts = now()
+    with get_db() as conn:
+        return conn.execute(
+            """INSERT INTO conversations
+                   (id, user_id, title, chat_provider, chat_model, created_at, updated_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)
+               RETURNING *""",
+            (conversation_id, user_id, title or "گفتگوی جدید", chat_provider, chat_model, ts, ts),
+        ).fetchone()
+
+
+def list_conversations(user_id: int):
+    with get_db() as conn:
+        return conn.execute(
+            """SELECT * FROM conversations
+                WHERE user_id = %s
+                ORDER BY updated_at DESC, created_at DESC""",
+            (user_id,),
+        ).fetchall()
+
+
+def get_conversation(user_id: int, conversation_id: str):
+    with get_db() as conn:
+        return conn.execute(
+            "SELECT * FROM conversations WHERE id = %s AND user_id = %s",
+            (conversation_id, user_id),
+        ).fetchone()
+
+
+def update_conversation(user_id: int, conversation_id: str, title=None,
+                        chat_provider=None, chat_model=None, touch: bool = True):
+    sets = []
+    params = []
+    if title is not None:
+        sets.append("title = %s")
+        params.append((title or "گفتگوی جدید").strip()[:160])
+    if chat_provider is not None:
+        sets.append("chat_provider = %s")
+        params.append(chat_provider)
+    if chat_model is not None:
+        sets.append("chat_model = %s")
+        params.append(chat_model)
+    if touch:
+        sets.append("updated_at = %s")
+        params.append(now())
+    if not sets:
+        return get_conversation(user_id, conversation_id)
+    params.extend([conversation_id, user_id])
+    with get_db() as conn:
+        return conn.execute(
+            f"""UPDATE conversations
+                   SET {', '.join(sets)}
+                 WHERE id = %s AND user_id = %s
+                 RETURNING *""",
+            tuple(params),
+        ).fetchone()
+
+
+def delete_conversation(user_id: int, conversation_id: str) -> bool:
+    with get_db() as conn:
+        row = conn.execute(
+            "DELETE FROM conversations WHERE id = %s AND user_id = %s RETURNING id",
+            (conversation_id, user_id),
+        ).fetchone()
+        return bool(row)
+
+
+def list_conversation_messages(user_id: int, conversation_id: str):
+    with get_db() as conn:
+        return conn.execute(
+            """SELECT conversation_messages.*
+                 FROM conversation_messages
+                 JOIN conversations ON conversations.id = conversation_messages.conversation_id
+                WHERE conversation_messages.conversation_id = %s
+                  AND conversations.user_id = %s
+                ORDER BY conversation_messages.created_at ASC""",
+            (conversation_id, user_id),
+        ).fetchall()
+
+
+def create_conversation_message(conversation_id: str, role: str, content: str = "",
+                                sources=None, status: str = "complete",
+                                stream_status: str = None):
+    message_id = uuid.uuid4().hex
+    ts = now()
+    with get_db() as conn:
+        row = conn.execute(
+            """INSERT INTO conversation_messages
+                   (id, conversation_id, role, content, sources_json, status, stream_status, created_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+               RETURNING *""",
+            (message_id, conversation_id, role, content or "", _encode_sources(sources),
+             status, stream_status, ts),
+        ).fetchone()
+        conn.execute("UPDATE conversations SET updated_at = %s WHERE id = %s", (ts, conversation_id))
+        return row
+
+
+def update_conversation_message(conversation_id: str, message_id: str, content=None,
+                                sources=None, status=None, stream_status=None):
+    sets = []
+    params = []
+    if content is not None:
+        sets.append("content = %s")
+        params.append(content)
+    if sources is not None:
+        sets.append("sources_json = %s")
+        params.append(_encode_sources(sources))
+    if status is not None:
+        sets.append("status = %s")
+        params.append(status)
+    if stream_status is not None:
+        sets.append("stream_status = %s")
+        params.append(stream_status)
+    if not sets:
+        return None
+    params.extend([message_id, conversation_id])
+    with get_db() as conn:
+        row = conn.execute(
+            f"""UPDATE conversation_messages
+                   SET {', '.join(sets)}
+                 WHERE id = %s AND conversation_id = %s
+                 RETURNING *""",
+            tuple(params),
+        ).fetchone()
+        conn.execute("UPDATE conversations SET updated_at = %s WHERE id = %s", (now(), conversation_id))
+        return row
 
 
 def update_asset_status(asset_id: str, status: str, scan_error: str = None,

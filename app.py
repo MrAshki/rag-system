@@ -1,7 +1,8 @@
 import os
+import json
 import uuid
 from datetime import datetime, date
-from flask import Flask, request, jsonify, redirect, session
+from flask import Flask, request, jsonify, redirect, session, Response, stream_with_context
 from flask.json.provider import DefaultJSONProvider
 
 import rag
@@ -70,6 +71,8 @@ def health():
     return jsonify({
         "status": "ok",
         "answer_prompt_version": rag.ANSWER_PROMPT_VERSION,
+        "chat_provider": rag.CHAT_PROVIDER.name,
+        "chat_model": rag.CHAT_PROVIDER.model,
         "ollama_model": rag.OLLAMA_MODEL,
         "ollama_num_ctx": rag.OLLAMA_NUM_CTX,
         "embedding_model": rag.EMBEDDING_MODEL,
@@ -79,6 +82,12 @@ def health():
         "rerank_top_k": rag.RERANK_TOP_K,
         "indexed_chunks": rag.collection.count(),
     })
+
+
+@app.route("/api/chat/models", methods=["GET"])
+@auth.login_required
+def chat_models():
+    return jsonify({"models": rag.chat_model_options()})
 
 
 @app.route("/")
@@ -368,6 +377,44 @@ def _asset_to_json(a) -> dict:
     }
 
 
+def _conversation_to_json(row) -> dict:
+    return {
+        "id": row["id"],
+        "title": row["title"],
+        "chat_provider": row["chat_provider"],
+        "chat_model": row["chat_model"],
+        "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+        "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+    }
+
+
+def _message_to_json(row) -> dict:
+    try:
+        sources = json.loads(row["sources_json"] or "[]")
+    except Exception:
+        sources = []
+    return {
+        "id": row["id"],
+        "role": row["role"],
+        "content": row["content"],
+        "sources": sources,
+        "status": row["status"],
+        "streamStatus": row["stream_status"],
+        "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+    }
+
+
+def _clean_title(value: str) -> str:
+    title = (value or "").strip()
+    return (title or "گفتگوی جدید")[:160]
+
+
+def _ask_rate_key() -> str:
+    data = request.get_json(silent=True) or {}
+    conversation_id = data.get("conversation_id") or "new"
+    return f"ask:{session.get('user_id')}:{conversation_id}"
+
+
 @app.route("/api/gallery/upload", methods=["POST"])
 @auth.subscription_required
 @rate_limited(lambda: f"upload:{session.get('user_id')}", min_interval_seconds=3, max_per_window=20, window_seconds=600)
@@ -441,9 +488,73 @@ def gallery_assets():
     })
 
 
+@app.route("/api/conversations", methods=["GET"])
+@auth.subscription_required
+def conversations_list():
+    user = auth.current_user()
+    rows = db.list_conversations(user["id"])
+    return jsonify({"conversations": [_conversation_to_json(row) for row in rows]})
+
+
+@app.route("/api/conversations", methods=["POST"])
+@auth.subscription_required
+def conversations_create():
+    user = auth.current_user()
+    data = request.get_json(silent=True) or {}
+    conversation = db.create_conversation(
+        user["id"],
+        title=_clean_title(data.get("title")),
+        chat_provider=data.get("chat_provider"),
+        chat_model=data.get("chat_model"),
+    )
+    return jsonify({"conversation": _conversation_to_json(conversation)}), 201
+
+
+@app.route("/api/conversations/<conversation_id>", methods=["PATCH"])
+@auth.subscription_required
+def conversations_update(conversation_id):
+    user = auth.current_user()
+    data = request.get_json(silent=True) or {}
+    conversation = db.get_conversation(user["id"], conversation_id)
+    if not conversation:
+        return jsonify({"error": "گفتگو پیدا نشد"}), 404
+
+    updated = db.update_conversation(
+        user["id"],
+        conversation_id,
+        title=_clean_title(data.get("title")) if "title" in data else None,
+        chat_provider=data.get("chat_provider") if "chat_provider" in data else None,
+        chat_model=data.get("chat_model") if "chat_model" in data else None,
+    )
+    return jsonify({"conversation": _conversation_to_json(updated)})
+
+
+@app.route("/api/conversations/<conversation_id>", methods=["DELETE"])
+@auth.subscription_required
+def conversations_delete(conversation_id):
+    user = auth.current_user()
+    if not db.delete_conversation(user["id"], conversation_id):
+        return jsonify({"error": "گفتگو پیدا نشد"}), 404
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/conversations/<conversation_id>/messages", methods=["GET"])
+@auth.subscription_required
+def conversations_messages(conversation_id):
+    user = auth.current_user()
+    conversation = db.get_conversation(user["id"], conversation_id)
+    if not conversation:
+        return jsonify({"error": "گفتگو پیدا نشد"}), 404
+    rows = db.list_conversation_messages(user["id"], conversation_id)
+    return jsonify({
+        "conversation": _conversation_to_json(conversation),
+        "messages": [_message_to_json(row) for row in rows],
+    })
+
+
 @app.route("/api/ask", methods=["POST"])
 @auth.subscription_required
-@rate_limited(lambda: f"ask:{session.get('user_id')}", min_interval_seconds=1, max_per_window=60, window_seconds=600)
+@rate_limited(_ask_rate_key, min_interval_seconds=1, max_per_window=60, window_seconds=600)
 def ask():
     user = auth.current_user()
     data = request.get_json(silent=True) or {}
@@ -451,24 +562,201 @@ def ask():
     scope = data.get("scope", "all")
     document_id = data.get("document_id")
     document_name = data.get("document_name")
+    chat_provider = data.get("chat_provider")
+    chat_model = data.get("chat_model")
+    conversation_id = data.get("conversation_id")
 
     if not question:
         return jsonify({"error": "سوال خالی است"}), 400
     if scope == "selected" and not document_id:
         return jsonify({"error": "برای این حالت باید یک سند انتخاب شود"}), 400
 
+    conversation = None
+    if conversation_id:
+        conversation = db.get_conversation(user["id"], conversation_id)
+        if not conversation:
+            return jsonify({"error": "گفتگو پیدا نشد"}), 404
+        if chat_provider or chat_model:
+            conversation = db.update_conversation(
+                user["id"], conversation_id,
+                chat_provider=chat_provider or conversation["chat_provider"],
+                chat_model=chat_model or conversation["chat_model"],
+            )
+        chat_provider = chat_provider or conversation["chat_provider"]
+        chat_model = chat_model or conversation["chat_model"]
+    else:
+        conversation = db.create_conversation(
+            user["id"],
+            chat_provider=chat_provider,
+            chat_model=chat_model,
+        )
+        conversation_id = conversation["id"]
+
+    db.create_conversation_message(conversation_id, "user", question)
+    if conversation["title"] == "گفتگوی جدید":
+        conversation = db.update_conversation(user["id"], conversation_id, title=question[:42])
+
     # The full pipeline (understand the message -> per-question retrieve -> grounded
     # answer -> assemble) lives in rag.answer_request, so the web path and the offline
     # quality tests exercise exactly the same code. Semantic query understanding
     # replaced the old punctuation-based split_questions().
-    result = rag.answer_request(
-        question,
-        scope=scope,
-        document_id=document_id,
-        user_id=user["id"],
-        selected_source=document_name,
-    )
+    try:
+        result = rag.answer_request(
+            question,
+            scope=scope,
+            document_id=document_id,
+            user_id=user["id"],
+            selected_source=document_name,
+            chat_provider_name=chat_provider,
+            chat_model=chat_model,
+        )
+        db.create_conversation_message(
+            conversation_id,
+            "assistant",
+            result.get("answer", ""),
+            sources=result.get("sources", []),
+            status="complete",
+        )
+    except Exception:
+        db.create_conversation_message(
+            conversation_id,
+            "assistant",
+            "خطا در تولید پاسخ.",
+            status="error",
+        )
+        raise
+    result["conversation"] = _conversation_to_json(conversation)
     return jsonify(result)
+
+
+@app.route("/api/ask/stream", methods=["POST"])
+@auth.subscription_required
+@rate_limited(_ask_rate_key, min_interval_seconds=1, max_per_window=60, window_seconds=600)
+def ask_stream():
+    user = auth.current_user()
+    data = request.get_json(silent=True) or {}
+    question = data.get("question", "").strip()
+    scope = data.get("scope", "all")
+    document_id = data.get("document_id")
+    document_name = data.get("document_name")
+    chat_provider = data.get("chat_provider")
+    chat_model = data.get("chat_model")
+    conversation_id = data.get("conversation_id")
+
+    if not question:
+        return jsonify({"error": "سوال خالی است"}), 400
+    if scope == "selected" and not document_id:
+        return jsonify({"error": "برای این حالت باید یک سند انتخاب شود"}), 400
+
+    user_id = user["id"]
+    if conversation_id:
+        conversation = db.get_conversation(user_id, conversation_id)
+        if not conversation:
+            return jsonify({"error": "گفتگو پیدا نشد"}), 404
+        if chat_provider or chat_model:
+            conversation = db.update_conversation(
+                user_id,
+                conversation_id,
+                chat_provider=chat_provider or conversation["chat_provider"],
+                chat_model=chat_model or conversation["chat_model"],
+            )
+        chat_provider = chat_provider or conversation["chat_provider"]
+        chat_model = chat_model or conversation["chat_model"]
+    else:
+        conversation = db.create_conversation(
+            user_id,
+            chat_provider=chat_provider,
+            chat_model=chat_model,
+        )
+        conversation_id = conversation["id"]
+
+    user_message = db.create_conversation_message(conversation_id, "user", question)
+    if conversation["title"] == "گفتگوی جدید":
+        conversation = db.update_conversation(user_id, conversation_id, title=question[:42])
+    assistant_message = db.create_conversation_message(
+        conversation_id,
+        "assistant",
+        "",
+        status="streaming",
+        stream_status="در حال آماده‌سازی...",
+    )
+
+    def event_stream():
+        answer_text = ""
+        final_sources = []
+        client_closed = False
+        try:
+            yield json.dumps({
+                "type": "conversation",
+                "conversation": _conversation_to_json(conversation),
+                "user_message": _message_to_json(user_message),
+                "assistant_message": _message_to_json(assistant_message),
+            }, ensure_ascii=False) + "\n"
+            for event in rag.answer_request_stream(
+                question,
+                scope=scope,
+                document_id=document_id,
+                user_id=user_id,
+                selected_source=document_name,
+                chat_provider_name=chat_provider,
+                chat_model=chat_model,
+            ):
+                if event.get("type") == "token":
+                    answer_text += event.get("delta") or ""
+                elif event.get("type") == "final":
+                    if not answer_text and event.get("answer"):
+                        answer_text = event["answer"]
+                    final_sources = event.get("sources") or []
+                    db.update_conversation_message(
+                        conversation_id,
+                        assistant_message["id"],
+                        content=answer_text,
+                        sources=final_sources,
+                        status="complete",
+                    )
+                elif event.get("type") == "error":
+                    db.update_conversation_message(
+                        conversation_id,
+                        assistant_message["id"],
+                        content=event.get("error") or "خطا در تولید پاسخ.",
+                        status="error",
+                    )
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+        except GeneratorExit:
+            client_closed = True
+            raise
+        except Exception as e:
+            print(f"ask_stream: unhandled error ({e})", flush=True)
+            db.update_conversation_message(
+                conversation_id,
+                assistant_message["id"],
+                content="خطا در تولید پاسخ.",
+                status="error",
+            )
+            yield json.dumps(
+                {"type": "error", "error": "خطا در تولید پاسخ."},
+                ensure_ascii=False,
+            ) + "\n"
+        finally:
+            if answer_text:
+                db.update_conversation_message(
+                    conversation_id,
+                    assistant_message["id"],
+                    content=answer_text,
+                    sources=final_sources,
+                    status="complete",
+                )
+            if not client_closed:
+                yield json.dumps({"type": "done"}, ensure_ascii=False) + "\n"
+
+    return Response(
+        stream_with_context(event_stream()),
+        content_type="application/x-ndjson; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

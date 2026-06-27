@@ -10,12 +10,13 @@ import torch
 from dotenv import load_dotenv
 import chromadb
 from chromadb.utils import embedding_functions
-import ollama
 import sys
 import threading
-from typing import List, Dict, Optional
+from typing import Iterable, List, Dict, Optional
 
 from document_pipeline import chunker
+from model_gateway import get_chat_provider, list_chat_model_options
+from model_gateway.base import ChatProvider
 
 sys.stdout.reconfigure(encoding="utf-8")
 load_dotenv()
@@ -56,6 +57,7 @@ EMBEDDING_MODEL = _require_env("EMBEDDING_MODEL")
 OLLAMA_MODEL = _require_env("OLLAMA_MODEL")
 OLLAMA_NUM_CTX = _positive_int_env("OLLAMA_NUM_CTX", 4096)
 COLLECTION_NAME = "document_qa_collection_local"
+CHAT_PROVIDER = get_chat_provider()
 
 # Bump this whenever the grounding/language prompt or guards change. It is logged
 # at startup and on the health route so we can PROVE which prompt a running server
@@ -104,6 +106,7 @@ _chroma_lock = threading.Lock()
 print(
     f"[rag] loaded module={os.path.abspath(__file__)} "
     f"ANSWER_PROMPT_VERSION={ANSWER_PROMPT_VERSION} "
+    f"CHAT_PROVIDER={CHAT_PROVIDER.name} CHAT_MODEL={CHAT_PROVIDER.model} "
     f"OLLAMA_MODEL={OLLAMA_MODEL} OLLAMA_NUM_CTX={OLLAMA_NUM_CTX} "
     f"EMBEDDING_MODEL={EMBEDDING_MODEL}",
     flush=True,
@@ -204,7 +207,11 @@ def list_documents(user_id: int = None) -> List[Dict]:
     ]
 
 
-def understand_query(text: str) -> List[Dict]:
+def chat_model_options() -> List[Dict]:
+    return list_chat_model_options()
+
+
+def understand_query(text: str, chat_provider: ChatProvider = None) -> List[Dict]:
     """Interpret a (possibly messy, misspelled, mis-punctuated, or multi-part) user
     message into one or more distinct questions, each with a cleaned-up retrieval query.
 
@@ -246,16 +253,16 @@ def understand_query(text: str) -> List[Dict]:
         '{"questions": [{"user_question": "...", "search_query": "..."}]}'
     )
     try:
-        resp = ollama.chat(
-            model=OLLAMA_MODEL,
+        provider = chat_provider or CHAT_PROVIDER
+        content = provider.chat(
             messages=[
                 {"role": "system", "content": instruction},
                 {"role": "user", "content": text},
             ],
             options={"temperature": 0.0, "num_ctx": OLLAMA_NUM_CTX},
-            format="json",
+            response_format="json",
         )
-        data = json.loads(resp["message"]["content"])
+        data = json.loads(content)
         cleaned = []
         for q in (data.get("questions") or [])[:10]:
             uq = (q.get("user_question") or "").strip()
@@ -409,104 +416,174 @@ def _question_language(text: str) -> str:
     return "en"
 
 
-def generate_response(
-    question: str,
-    relevant_chunks: List[Dict],
-    scope: str = "all",
-    selected_source: str = None,
-) -> Dict:
-    no_info_message = (
+def _no_info_message(scope: str) -> str:
+    return (
         "در سند انتخاب‌شده اطلاعات کافی برای پاسخ وجود ندارد."
         if scope == "selected"
         else "اطلاعات کافی در اسناد موجود برای پاسخ به این سؤال وجود ندارد."
     )
 
+
+def _build_answer_messages(
+    question: str,
+    relevant_chunks: List[Dict],
+    scope: str = "all",
+    selected_source: str = None,
+) -> List[Dict]:
+    no_info_message = _no_info_message(scope)
+    context = "\n\n".join(
+        f"[S{i}: {_citation_label(c)}]\n{c['text']}"
+        for i, c in enumerate(relevant_chunks, start=1)
+    )
+
+    lang = _question_language(question)
+    if lang == "fa":
+        language_directive = (
+            "زبان سؤال کاربر فارسی است. کل پاسخ را فقط و فقط به فارسیِ روان و طبیعی "
+            "بنویس، حتی اگر متنِ بازیابی‌شده انگلیسی باشد."
+        )
+        lang_reminder = "یادآوری: پاسخ را فقط به فارسیِ روان بنویس."
+    else:
+        language_directive = (
+            "The user's question is in English. Write your entire answer in fluent "
+            "English, even if the retrieved context is in another language."
+        )
+        lang_reminder = "Reminder: answer in English."
+
+    scope_instruction = (
+        f"The user restricted the scope to a single document: \"{selected_source}\". "
+        "Use only context from that document. "
+        if scope == "selected"
+        else ""
+    )
+
+    # One short, principled prompt. No rule cascades, no entity regex, no
+    # placeholder templates -- those made answers worse (see plan/). The model is
+    # trusted to apply clear principles; grounding stays strict because the answer
+    # may only use the verbatim retrieved context below.
+    system_content = (
+        "You are a knowledgeable assistant answering questions about the user's "
+        "documents, using only the retrieved context provided below.\n\n"
+        "ANSWER LANGUAGE (most important): " + language_directive + " The answer "
+        "language is decided only by the question, never by the language of the context.\n\n"
+        "GROUNDING: Use only what is actually in the retrieved context. Do not use "
+        "outside or general knowledge, and do not invent facts. You may use ordinary "
+        "reading comprehension (e.g. recognizing that a term and its translation mean the "
+        "same thing).\n\n"
+        "IF the retrieved context does not contain enough to answer, reply with exactly "
+        "this sentence and nothing else: \"" + no_info_message + "\"\n\n"
+        "NAMED-PERSON CHECK (very important): The retrieved context is selected by topic "
+        "and may NOT mention the specific person named in the question. Before you write "
+        "\"<name> believes/says/argues ...\" or otherwise attribute any view to a named "
+        "person, first check whether that person's actual name literally appears in the "
+        "retrieved context. Do NOT assume the person named in the question is the author "
+        "of the document or anyone mentioned in it -- a name only counts as present if it "
+        "literally appears in the retrieved context above. If the name does NOT appear "
+        "there, you must NOT attribute anything to them, must NOT call them the author, "
+        "and must NOT put their name in your answer as a view-holder. Instead, briefly "
+        "note that the text does not specifically discuss that person, then answer about "
+        "the topic itself from the context. Only attribute a view to a person whose name "
+        "actually appears in the retrieved context.\n"
+        "Worked example: if the question is «نظر فلانی درباره اراده آزاد چیه؟» and the "
+        "name «فلانی» does not literally appear in the context (even though the context "
+        "talks about 'the author' or says 'I'), the correct answer begins with something "
+        "like «در متن بازیابی‌شده به‌طور خاص دربارهٔ فلانی چیزی نیامده است» and then "
+        "summarizes the topic. It must NOT say «فلانی نویسنده است» or «فلانی معتقد است ...». "
+        "On the other hand, if the asked name (or an obvious equivalent) DOES literally "
+        "appear in the retrieved context, just answer normally and attribute to them -- do "
+        "NOT add any 'not discussed' note in that case.\n\n"
+        "STYLE: Answer directly, naturally, and fluently, like a knowledgeable person "
+        "explaining clearly. Match the depth to the question -- keep simple questions "
+        "concise, and when the user asks for explanation or detail, give a fuller, "
+        "well-organized answer. Do not be creative or speculative. " + scope_instruction +
+        "\n\n"
+        "CITATIONS: Every factual sentence or bullet that uses the retrieved context MUST "
+        "end with one or more source markers like [S1] or [S2][S4]. Use the S-number from "
+        "the context block that supports that exact claim. Do not put citations in a final "
+        "references section. Do not write a separate sources list. If a sentence combines "
+        "facts from multiple chunks, cite all relevant chunks at the end of that sentence."
+    ).strip()
+
+    user_content = f"Context:\n{context}\n\nQuestion: {question}\n\n{lang_reminder}"
+    return [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_content},
+    ]
+
+
+def _sources_for_answer(answer: str, no_info_message: str, chunks: List[Dict]) -> List[str]:
+    return [] if answer == no_info_message else [_citation_label(c) for c in chunks]
+
+
+def generate_response(
+    question: str,
+    relevant_chunks: List[Dict],
+    scope: str = "all",
+    selected_source: str = None,
+    chat_provider: ChatProvider = None,
+) -> Dict:
+    no_info_message = _no_info_message(scope)
     if not relevant_chunks:
         return {"answer": no_info_message, "sources": []}
 
     try:
-        context = "\n\n".join(
-            f"[منبع: {_citation_label(c)}]\n{c['text']}" for c in relevant_chunks
-        )
-
-        lang = _question_language(question)
-        if lang == "fa":
-            language_directive = (
-                "زبان سؤال کاربر فارسی است. کل پاسخ را فقط و فقط به فارسیِ روان و طبیعی "
-                "بنویس، حتی اگر متنِ بازیابی‌شده انگلیسی باشد."
-            )
-            lang_reminder = "یادآوری: پاسخ را فقط به فارسیِ روان بنویس."
-        else:
-            language_directive = (
-                "The user's question is in English. Write your entire answer in fluent "
-                "English, even if the retrieved context is in another language."
-            )
-            lang_reminder = "Reminder: answer in English."
-
-        scope_instruction = (
-            f"The user restricted the scope to a single document: \"{selected_source}\". "
-            "Use only context from that document. "
-            if scope == "selected"
-            else ""
-        )
-
-        # One short, principled prompt. No rule cascades, no entity regex, no
-        # placeholder templates -- those made answers worse (see plan/). The model is
-        # trusted to apply clear principles; grounding stays strict because the answer
-        # may only use the verbatim retrieved context below.
-        system_content = (
-            "You are a knowledgeable assistant answering questions about the user's "
-            "documents, using only the retrieved context provided below.\n\n"
-            "ANSWER LANGUAGE (most important): " + language_directive + " The answer "
-            "language is decided only by the question, never by the language of the context.\n\n"
-            "GROUNDING: Use only what is actually in the retrieved context. Do not use "
-            "outside or general knowledge, and do not invent facts. You may use ordinary "
-            "reading comprehension (e.g. recognizing that a term and its translation mean the "
-            "same thing).\n\n"
-            "IF the retrieved context does not contain enough to answer, reply with exactly "
-            "this sentence and nothing else: \"" + no_info_message + "\"\n\n"
-            "NAMED-PERSON CHECK (very important): The retrieved context is selected by topic "
-            "and may NOT mention the specific person named in the question. Before you write "
-            "\"<name> believes/says/argues ...\" or otherwise attribute any view to a named "
-            "person, first check whether that person's actual name literally appears in the "
-            "retrieved context. Do NOT assume the person named in the question is the author "
-            "of the document or anyone mentioned in it -- a name only counts as present if it "
-            "literally appears in the retrieved context above. If the name does NOT appear "
-            "there, you must NOT attribute anything to them, must NOT call them the author, "
-            "and must NOT put their name in your answer as a view-holder. Instead, briefly "
-            "note that the text does not specifically discuss that person, then answer about "
-            "the topic itself from the context. Only attribute a view to a person whose name "
-            "actually appears in the retrieved context.\n"
-            "Worked example: if the question is «نظر فلانی درباره اراده آزاد چیه؟» and the "
-            "name «فلانی» does not literally appear in the context (even though the context "
-            "talks about 'the author' or says 'I'), the correct answer begins with something "
-            "like «در متن بازیابی‌شده به‌طور خاص دربارهٔ فلانی چیزی نیامده است» and then "
-            "summarizes the topic. It must NOT say «فلانی نویسنده است» or «فلانی معتقد است ...». "
-            "On the other hand, if the asked name (or an obvious equivalent) DOES literally "
-            "appear in the retrieved context, just answer normally and attribute to them -- do "
-            "NOT add any 'not discussed' note in that case.\n\n"
-            "STYLE: Answer directly, naturally, and fluently, like a knowledgeable person "
-            "explaining clearly. Match the depth to the question -- keep simple questions "
-            "concise, and when the user asks for explanation or detail, give a fuller, "
-            "well-organized answer. Do not be creative or speculative. " + scope_instruction
-        ).strip()
-
-        user_content = f"Context:\n{context}\n\nQuestion: {question}\n\n{lang_reminder}"
-
-        response = ollama.chat(
-            model=OLLAMA_MODEL,
-            messages=[
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": user_content},
-            ],
+        provider = chat_provider or CHAT_PROVIDER
+        answer = provider.chat(
+            messages=_build_answer_messages(
+                question,
+                relevant_chunks,
+                scope=scope,
+                selected_source=selected_source,
+            ),
             options={"temperature": 0.0, "num_ctx": OLLAMA_NUM_CTX},
-        )
-        answer = response["message"]["content"].strip()
-        sources = [] if answer == no_info_message else [_citation_label(c) for c in relevant_chunks]
+        ).strip()
+        sources = _sources_for_answer(answer, no_info_message, relevant_chunks)
         return {"answer": answer, "sources": sources}
     except Exception as e:
         print(f"Error generating response: {str(e)}")
-        return {"answer": "Error generating response.", "sources": []}
+        return {"answer": "خطا در تولید پاسخ.", "sources": []}
+
+
+def _trace(stage: str, status: str, **data) -> Dict:
+    event = {"type": "trace", "stage": stage, "status": status}
+    event.update(data)
+    return event
+
+
+def generate_response_stream(
+    question: str,
+    relevant_chunks: List[Dict],
+    scope: str = "all",
+    selected_source: str = None,
+    chat_provider: ChatProvider = None,
+) -> Iterable[Dict]:
+    no_info_message = _no_info_message(scope)
+    if not relevant_chunks:
+        yield {"type": "token", "delta": no_info_message}
+        yield {"type": "final", "answer": no_info_message, "sources": []}
+        return
+
+    try:
+        provider = chat_provider or CHAT_PROVIDER
+        answer_parts = []
+        for delta in provider.stream_chat(
+            messages=_build_answer_messages(
+                question,
+                relevant_chunks,
+                scope=scope,
+                selected_source=selected_source,
+            ),
+            options={"temperature": 0.0, "num_ctx": OLLAMA_NUM_CTX},
+        ):
+            answer_parts.append(delta)
+            yield {"type": "token", "delta": delta}
+
+        answer = "".join(answer_parts).strip()
+        sources = _sources_for_answer(answer, no_info_message, relevant_chunks)
+        yield {"type": "final", "answer": answer, "sources": sources}
+    except Exception as e:
+        print(f"Error streaming response: {str(e)}")
+        yield {"type": "error", "error": "خطا در تولید پاسخ."}
 
 
 def answer_request(
@@ -515,23 +592,30 @@ def answer_request(
     document_id: str = None,
     user_id: int = None,
     selected_source: str = None,
+    chat_provider_name: str = None,
+    chat_model: str = None,
 ) -> Dict:
     """End-to-end answer pipeline used by the app:
         understand the message -> for each distinct question, retrieve its own context
-        and answer it grounded -> assemble.
+    and answer it grounded -> assemble.
 
     A single question returns a single clean answer (same shape as generate_response).
     Several questions return one organized response that addresses each in turn, each
     grounded only in its own retrieved context (so questions never cross-contaminate
     and the context window never has to hold everything at once)."""
     doc_filter = document_id if scope == "selected" else None
-    sub_qs = understand_query(question)
+    provider = get_chat_provider(chat_provider_name, chat_model)
+    sub_qs = understand_query(question, chat_provider=provider)
 
     if len(sub_qs) == 1:
         sq = sub_qs[0]
         chunks = retrieve(sq["search_query"], document_id=doc_filter, user_id=user_id)
         return generate_response(
-            sq["user_question"], chunks, scope=scope, selected_source=selected_source
+            sq["user_question"],
+            chunks,
+            scope=scope,
+            selected_source=selected_source,
+            chat_provider=provider,
         )
 
     blocks = []
@@ -540,7 +624,11 @@ def answer_request(
     for sq in sub_qs:
         chunks = retrieve(sq["search_query"], document_id=doc_filter, user_id=user_id)
         sub = generate_response(
-            sq["user_question"], chunks, scope=scope, selected_source=selected_source
+            sq["user_question"],
+            chunks,
+            scope=scope,
+            selected_source=selected_source,
+            chat_provider=provider,
         )
         blocks.append(f"❖ {sq['user_question']}\n{sub['answer']}")
         for s in sub["sources"]:
@@ -548,3 +636,116 @@ def answer_request(
                 seen.add(s)
                 merged_sources.append(s)
     return {"answer": "\n\n".join(blocks), "sources": merged_sources}
+
+
+def answer_request_stream(
+    question: str,
+    scope: str = "all",
+    document_id: str = None,
+    user_id: int = None,
+    selected_source: str = None,
+    chat_provider_name: str = None,
+    chat_model: str = None,
+) -> Iterable[Dict]:
+    """Streaming twin of answer_request.
+
+    Yields JSON-serializable events:
+      trace: pipeline progress
+      token: answer text delta
+      final: final answer + sources
+      error: recoverable failure
+      done: stream is complete
+    """
+    doc_filter = document_id if scope == "selected" else None
+    provider = get_chat_provider(chat_provider_name, chat_model)
+    yield _trace("request", "started")
+
+    yield _trace("understand_query", "started")
+    sub_qs = understand_query(question, chat_provider=provider)
+    yield _trace("understand_query", "done", question_count=len(sub_qs))
+
+    if len(sub_qs) == 1:
+        sq = sub_qs[0]
+        yield _trace("retrieve", "started", query=sq["search_query"])
+        chunks = retrieve(sq["search_query"], document_id=doc_filter, user_id=user_id)
+        yield _trace("retrieve", "done", chunks=len(chunks))
+
+        yield _trace(
+            "generate",
+            "started",
+            provider=provider.name,
+            model=provider.model,
+        )
+        final_event = None
+        for event in generate_response_stream(
+            sq["user_question"],
+            chunks,
+            scope=scope,
+            selected_source=selected_source,
+            chat_provider=provider,
+        ):
+            if event.get("type") == "final":
+                final_event = event
+            else:
+                yield event
+        yield _trace("generate", "done")
+        if final_event:
+            yield final_event
+        yield {"type": "done"}
+        return
+
+    answer_parts = []
+    merged_sources = []
+    seen = set()
+    for i, sq in enumerate(sub_qs):
+        yield _trace(
+            "sub_question",
+            "started",
+            index=i + 1,
+            total=len(sub_qs),
+            question=sq["user_question"],
+        )
+        yield _trace("retrieve", "started", index=i + 1, query=sq["search_query"])
+        chunks = retrieve(sq["search_query"], document_id=doc_filter, user_id=user_id)
+        yield _trace("retrieve", "done", index=i + 1, chunks=len(chunks))
+
+        separator = "\n\n" if i else ""
+        prefix = f"{separator}❖ {sq['user_question']}\n"
+        answer_parts.append(prefix)
+        yield {"type": "token", "delta": prefix}
+
+        yield _trace(
+            "generate",
+            "started",
+            index=i + 1,
+            provider=provider.name,
+            model=provider.model,
+        )
+        final_event = None
+        for event in generate_response_stream(
+            sq["user_question"],
+            chunks,
+            scope=scope,
+            selected_source=selected_source,
+            chat_provider=provider,
+        ):
+            if event.get("type") == "final":
+                final_event = event
+                answer_parts.append(event.get("answer", ""))
+                for source in event.get("sources", []):
+                    if source not in seen:
+                        seen.add(source)
+                        merged_sources.append(source)
+            elif event.get("type") == "token":
+                yield event
+            else:
+                yield event
+        yield _trace("generate", "done", index=i + 1)
+        yield _trace("sub_question", "done", index=i + 1)
+
+    yield {
+        "type": "final",
+        "answer": "".join(answer_parts),
+        "sources": merged_sources,
+    }
+    yield {"type": "done"}
