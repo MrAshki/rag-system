@@ -1,0 +1,106 @@
+@import url("https://cdn.jsdelivr.net/fontsource/css/estedad@5.2.1/400.css");
+@import url("https://cdn.jsdelivr.net/fontsource/css/estedad@5.2.1/500.css");
+@import url("https://cdn.jsdelivr.net/fontsource/css/estedad@5.2.1/600.css");
+@import url("https://cdn.jsdelivr.net/fontsource/css/estedad@5.2.1/700.css");
+
+:root {
+  --bg: #081320;
+  --surface: #102033;
+  --surface-2: #14263b;
+  --muted: #1b3048;
+  --border: #223a55;
+  --foreground: #f4f7fb;
+  --muted-foreground: #8da0b8;
+  --primary: #16bfb2;
+  --primary-hover: #27d4c6;
+  --primary-soft: rgba(22, 191, 178, 0.14);
+  --on-primary: #04131c;
+  --topbar-bg: rgba(16, 32, 51, 0.78);
+  --panel-bg: rgba(16, 32, 51, 0.88);
+  --composer-bg: #102033;
+  --destructive: #ff6b6b;
+  --warning: #f7b955;
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 18px;
+  --radius-full: 999px;
+  --shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.18);
+  --shadow-md: 0 16px 42px rgba(0, 0, 0, 0.26);
+  --shadow-lg: 0 24px 72px rgba(0, 0, 0, 0.36);
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --transition: 160ms ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+[data-theme="light"] {
+  --bg: #eef2f6;
+  --surface: #ffffff;
+  --surface-2: #f5f8fb;
+  --muted: #eef2f6;
+  --border: #dbe3ec;
+  --foreground: #0f2336;
+  --muted-foreground: #5b6b7d;
+  --primary: #0d9488;
+  --primary-hover: #0f766e;
+  --primary-soft: #e6f7f4;
+  --on-primary: #ffffff;
+  --topbar-bg: rgba(255, 255, 255, 0.82);
+  --panel-bg: #ffffff;
+  --composer-bg: #ffffff;
+  --destructive: #dc2626;
+  --warning: #d97706;
+  --shadow-sm: 0 1px 2px rgba(15, 35, 54, 0.05), 0 1px 3px rgba(15, 35, 54, 0.07);
+  --shadow-md: 0 6px 18px rgba(15, 35, 54, 0.09);
+  --shadow-lg: 0 16px 40px rgba(15, 35, 54, 0.16);
+}
+
+body {
+  color: var(--foreground);
+  background:
+    radial-gradient(980px 460px at 100% -8%, rgba(22, 191, 178, 0.14), transparent 55%),
+    radial-gradient(820px 420px at 0% 0%, rgba(74, 144, 226, 0.12), transparent 52%),
+    var(--bg);
+  font-family: "Estedad", "Vazirmatn", Tahoma, Arial, sans-serif;
+  font-size: var(--text-base);
+  line-height: 1.7;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+@media (max-width: 860px) {
+  body {
+    overflow: auto;
+  }
+}

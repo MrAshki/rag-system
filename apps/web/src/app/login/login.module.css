@@ -1,0 +1,142 @@
+.page {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+}
+
+.card {
+  width: min(480px, 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  padding: 28px;
+}
+
+.brand {
+  text-align: center;
+  margin-bottom: 22px;
+}
+
+.brandIcon {
+  width: 58px;
+  height: 58px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 18px;
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.brandIcon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.brand h1 {
+  margin: 14px 0 0;
+  font-size: 24px;
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  min-height: 48px;
+  padding: 4px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  margin-bottom: 22px;
+}
+
+.tabs button {
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+  background: transparent;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.tabs button.active {
+  color: var(--primary-hover);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.hint {
+  color: var(--muted-foreground);
+  line-height: 1.8;
+  font-size: 13px;
+  margin: 0 0 18px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.field label {
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.field input {
+  width: 100%;
+  min-height: 54px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--foreground);
+  background: var(--surface-2);
+  padding: 10px 14px;
+  outline: none;
+}
+
+.field input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(22, 191, 178, 0.18);
+}
+
+.primary {
+  width: 100%;
+  min-height: 50px;
+  border: none;
+  border-radius: var(--radius);
+  color: #04131c;
+  background: var(--primary);
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.primary:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+
+.message {
+  min-height: 28px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  margin-top: 12px;
+  text-align: center;
+}
+
+.error {
+  color: var(--destructive);
+}
+
+.footer {
+  margin-top: 18px;
+  color: var(--muted-foreground);
+  text-align: center;
+  font-size: 13px;
+}
+
+.footer a {
+  color: var(--primary-hover);
+  font-weight: 900;
+}

@@ -8,18 +8,18 @@ import json
 import uuid
 import torch
 from dotenv import load_dotenv
-import chromadb
-from chromadb.utils import embedding_functions
 import sys
-import threading
 from typing import Iterable, List, Dict, Optional
 
 from document_pipeline import chunker
+from backend.app.vector import get_vector_store
+from backend.app.vector.base import VectorChunk
+from backend.app.vector.embeddings import embed_text, embedding_device
 from model_gateway import get_chat_provider, list_chat_model_options
 from model_gateway.base import ChatProvider
 
 sys.stdout.reconfigure(encoding="utf-8")
-load_dotenv()
+load_dotenv(override=True)
 
 def _require_env(name: str) -> str:
     """Fail fast instead of silently falling back to a different model.
@@ -64,7 +64,7 @@ CHAT_PROVIDER = get_chat_provider()
 # is actually serving (a stale server keeps the old value in memory until restart).
 ANSWER_PROMPT_VERSION = "rerank_v5"
 
-# Two-stage retrieval: pull a wide dense net from Chroma (bge-m3), then rerank with a
+# Two-stage retrieval: pull a wide dense net from pgvector (bge-m3), then rerank with a
 # cross-encoder (bge-reranker-v2-m3) and keep the best few. The cross-encoder judges
 # query/chunk relevance far better than dense similarity alone -- e.g. it ranks the
 # book's actual thesis above a sub-argument the author only quotes to rebut.
@@ -76,31 +76,13 @@ ENABLE_RERANKER = os.getenv("ENABLE_RERANKER", "true").strip().lower() == "true"
 RETRIEVE_K = _positive_int_env("RETRIEVE_K", 30)   # wide dense net before reranking
 RERANK_TOP_K = _positive_int_env("RERANK_TOP_K", 5)  # chunks kept for the answer
 
-if torch.cuda.is_available():
-    EMBEDDING_DEVICE = "cuda"
+EMBEDDING_DEVICE = embedding_device()
+if EMBEDDING_DEVICE == "cuda":
     print(f"Embedding device: cuda - {torch.cuda.get_device_name(0)}")
 else:
-    EMBEDDING_DEVICE = "cpu"
     print("Embedding device: cpu")
 
-try:
-    embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name=EMBEDDING_MODEL, device=EMBEDDING_DEVICE
-    )
-    chroma_client = chromadb.PersistentClient(path="chroma_persistent_storage")
-    collection = chroma_client.get_or_create_collection(
-        name=COLLECTION_NAME, embedding_function=embedding_fn
-    )
-except Exception as e:
-    print(f"Error initializing clients: {str(e)}")
-    sys.exit(1)
-
-# Serializes access to the Chroma collection (which embeds via bge-m3 under the
-# hood). The background scan worker indexes chunks on one thread while user
-# queries embed on request threads; a single lock keeps embedding/Chroma calls
-# from overlapping. Held only around individual collection calls (per-chunk on
-# the index path), so queries can still interleave between a document's chunks.
-_chroma_lock = threading.Lock()
+vector_store = get_vector_store()
 
 # Startup banner so a running server proves which code/prompt it loaded.
 print(
@@ -108,7 +90,7 @@ print(
     f"ANSWER_PROMPT_VERSION={ANSWER_PROMPT_VERSION} "
     f"CHAT_PROVIDER={CHAT_PROVIDER.name} CHAT_MODEL={CHAT_PROVIDER.model} "
     f"OLLAMA_MODEL={OLLAMA_MODEL} OLLAMA_NUM_CTX={OLLAMA_NUM_CTX} "
-    f"EMBEDDING_MODEL={EMBEDDING_MODEL}",
+    f"EMBEDDING_MODEL={EMBEDDING_MODEL} VECTOR_BACKEND=pgvector",
     flush=True,
 )
 
@@ -133,20 +115,26 @@ def index_document(filename: str, text: str, document_id: Optional[str] = None, 
     document_id = document_id or uuid.uuid4().hex
     chunks = split_text(text)
     print(f"Indexing '{filename}' ({len(chunks)} chunks) on {EMBEDDING_DEVICE} for user_id={user_id}...", flush=True)
-    for i, chunk in enumerate(chunks):
-        with _chroma_lock:
-            collection.upsert(
-                ids=[f"{document_id}_chunk{i+1}"],
-                documents=[chunk],
-                metadatas=[{
-                    "document_id": document_id,
-                    "source": filename,
-                    "chunk": i + 1,
-                    "user_id": user_id,
-                }],
-            )
-        if (i + 1) % 50 == 0 or (i + 1) == len(chunks):
-            print(f"  {filename}: {i+1}/{len(chunks)} chunks indexed", flush=True)
+    vector_chunks = [
+        VectorChunk(
+            chunk_id=f"{document_id}_chunk{i + 1}",
+            user_id=user_id,
+            document_id=document_id,
+            source=filename,
+            chunk_index=i + 1,
+            text=chunk,
+            metadata={
+                "document_id": document_id,
+                "source": filename,
+                "chunk": i + 1,
+                "user_id": user_id,
+            },
+        )
+        for i, chunk in enumerate(chunks)
+    ]
+    vector_store.add_chunks(vector_chunks)
+    if chunks:
+        print(f"  {filename}: {len(chunks)}/{len(chunks)} chunks indexed", flush=True)
     return {"document_id": document_id, "chunks": len(chunks)}
 
 
@@ -164,6 +152,7 @@ def index_chunks(
     and the same fields are kept as queryable metadata."""
     document_id = document_id or uuid.uuid4().hex
     print(f"Indexing '{filename}' ({len(chunks)} structured chunks) on {EMBEDDING_DEVICE} for user_id={user_id}...", flush=True)
+    vector_chunks = []
     for i, ch in enumerate(chunks):
         metadata = {
             "document_id": document_id,
@@ -180,35 +169,59 @@ def index_chunks(
             "char_end": ch.get("char_end"),
         }
         metadata = {k: v for k, v in metadata.items() if v is not None}
-        with _chroma_lock:
-            collection.upsert(
-                ids=[f"{document_id}_chunk{ch['chunk_index']}"],
-                documents=[chunker.build_embedded_text(ch)],
-                metadatas=[metadata],
+        vector_chunks.append(
+            VectorChunk(
+                chunk_id=f"{document_id}_chunk{ch['chunk_index']}",
+                user_id=user_id,
+                document_id=document_id,
+                source=filename,
+                chunk_index=ch["chunk_index"],
+                text=chunker.build_embedded_text(ch),
+                metadata=metadata,
             )
+        )
         if (i + 1) % 50 == 0 or (i + 1) == len(chunks):
             print(f"  {filename}: {i+1}/{len(chunks)} chunks indexed", flush=True)
+    vector_store.add_chunks(vector_chunks)
     return {"document_id": document_id, "chunks": len(chunks)}
 
 
 def list_documents(user_id: int = None) -> List[Dict]:
     """Return the distinct indexed documents as {document_id, source} for UI display.
     Scoped to a single user's documents unless user_id is None (admin/internal use)."""
-    where = {"user_id": user_id} if user_id is not None else None
-    with _chroma_lock:
-        data = collection.get(where=where, include=["metadatas"])
-    seen = {}
-    for m in data["metadatas"]:
-        if m and m.get("document_id") and m["document_id"] not in seen:
-            seen[m["document_id"]] = m.get("source", "نامشخص")
+    from sqlalchemy import text
+    from backend.app.db.session import session_scope
+
+    params = {}
+    where = ""
+    if user_id is not None:
+        where = "WHERE user_id = :user_id"
+        params["user_id"] = user_id
+    with session_scope() as session:
+        rows = session.execute(
+            text(
+                f"""
+                SELECT document_id, MIN(source) AS source
+                  FROM document_chunks
+                  {where}
+                 GROUP BY document_id
+                 ORDER BY MIN(source)
+                """
+            ),
+            params,
+        ).mappings().all()
     return [
-        {"document_id": doc_id, "source": source}
-        for doc_id, source in sorted(seen.items(), key=lambda kv: kv[1])
+        {"document_id": row["document_id"], "source": row["source"] or "نامشخص"}
+        for row in rows
     ]
 
 
 def chat_model_options() -> List[Dict]:
     return list_chat_model_options()
+
+
+def indexed_chunk_count() -> int:
+    return vector_store.count()
 
 
 def understand_query(text: str, chat_provider: ChatProvider = None) -> List[Dict]:
@@ -284,38 +297,26 @@ def query_documents(
     user_id: int = None,
 ) -> List[Dict]:
     try:
-        conditions = []
+        filters = {}
         if user_id is not None:
-            conditions.append({"user_id": user_id})
+            filters["user_id"] = user_id
         document_ids = [doc_id for doc_id in (document_ids or []) if doc_id]
         if document_ids:
-            conditions.append({"document_id": {"$in": document_ids}})
+            filters["document_ids"] = document_ids
         elif document_id:
-            conditions.append({"document_id": document_id})
+            filters["document_id"] = document_id
 
-        if len(conditions) == 0:
-            where = None
-        elif len(conditions) == 1:
-            where = conditions[0]
-        else:
-            where = {"$and": conditions}
-
-        with _chroma_lock:
-            results = collection.query(
-                query_texts=[question],
-                n_results=n_results,
-                where=where,
-                include=["documents", "metadatas"],
-            )
+        query_embedding = embed_text(question)
+        results = vector_store.search(query_embedding, filters=filters, top_k=n_results)
         chunks = []
-        docs = results["documents"][0] if results["documents"] else []
-        metas = results["metadatas"][0] if results["metadatas"] else []
-        for doc, meta in zip(docs, metas):
-            meta = meta or {}
+        for result in results:
+            meta = result.metadata or {}
             chunks.append({
-                "text": doc,
-                "source": meta.get("source", "نامشخص"),
-                "chunk": meta.get("chunk", "?"),
+                "text": result.text,
+                "source": result.source or meta.get("source", "نامشخص"),
+                "chunk": result.chunk or meta.get("chunk", "?"),
+                "document_id": result.document_id,
+                "score": result.score,
                 "chapter": meta.get("chapter"),
                 "section": meta.get("section"),
                 "subsection": meta.get("subsection"),
@@ -563,9 +564,9 @@ def generate_free_response(question: str, chat_provider: ChatProvider = None) ->
 
 
 def generate_free_response_stream(question: str, chat_provider: ChatProvider = None) -> Iterable[Dict]:
+    provider = chat_provider or CHAT_PROVIDER
+    answer_parts = []
     try:
-        provider = chat_provider or CHAT_PROVIDER
-        answer_parts = []
         for delta in provider.stream_chat(
             messages=_build_free_chat_messages(question),
             options={"temperature": 0.2, "num_ctx": OLLAMA_NUM_CTX},
@@ -576,6 +577,20 @@ def generate_free_response_stream(question: str, chat_provider: ChatProvider = N
         yield {"type": "final", "answer": answer, "sources": []}
     except Exception as e:
         print(f"Error streaming free chat response: {str(e)}")
+        if answer_parts:
+            yield {"type": "final", "answer": "".join(answer_parts).strip(), "sources": []}
+            return
+        try:
+            fallback = provider.chat(
+                messages=_build_free_chat_messages(question),
+                options={"temperature": 0.2, "num_ctx": OLLAMA_NUM_CTX},
+            ).strip()
+            if fallback:
+                yield {"type": "token", "delta": fallback}
+                yield {"type": "final", "answer": fallback, "sources": []}
+                return
+        except Exception as fallback_error:
+            print(f"Error generating fallback free chat response: {fallback_error}")
         yield {"type": "error", "error": "خطا در تولید پاسخ."}
 
 

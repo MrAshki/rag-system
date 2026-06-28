@@ -17,7 +17,7 @@ chroma_persistent_storage/
 # Local maintenance backups of the vector store (large, machine-specific)
 backups/
 
-# Legacy SQLite database (migrated to PostgreSQL) — never commit
+# Prevent accidental reintroduction of the removed legacy SQLite database.
 app_data.sqlite3
 
 # Runtime server logs

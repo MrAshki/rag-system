@@ -1,12 +1,12 @@
 """Background scan worker (in-process, Option A).
 
-A single daemon thread, started by app.py, drains the `assets` queue: it claims
+A single daemon thread, started by the FastAPI app, drains the `assets` queue: it claims
 each 'uploaded' asset and runs the existing text pipeline on it
 (normalize -> chunk -> embed/index), flipping its status to 'scanned' (text) or
 'stored' (media, which has no pipeline yet), or 'failed' on error.
 
 Why in-process: the whole pipeline (ingest, chunker, rag) and the loaded
-embedding model + Chroma client already live in the Flask process, so the thread
+embedding model + pgvector store already live in the backend process, so the thread
 just calls them directly -- no Redis/Celery/second process. See the plan's
 "اسکن پس‌زمینه: دو حالت" section for the trade-offs vs. a separate queue.
 """

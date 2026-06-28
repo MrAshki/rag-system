@@ -1,5 +1,4 @@
-"""Production entry point. Serves the app with waitress (a real WSGI server)
-instead of Flask's development server.
+"""Production entry point for the FastAPI backend.
 
 Usage:
     python serve.py
@@ -7,12 +6,10 @@ Usage:
 Behind a real domain, put nginx/Caddy in front of this for HTTPS termination
 and set PUBLIC_BASE_URL to the https:// URL in .env.
 """
-import os
-from waitress import serve
-from app import app
+import uvicorn
+
+from backend.app.core.config import settings
 
 if __name__ == "__main__":
-    host = os.getenv("HOST", "127.0.0.1")
-    port = int(os.getenv("PORT", "5000"))
-    print(f"Serving on http://{host}:{port} (waitress, production mode)")
-    serve(app, host=host, port=port, threads=8)
+    print(f"Serving on http://{settings.host}:{settings.port} (uvicorn, FastAPI)")
+    uvicorn.run("backend.app.main:app", host=settings.host, port=settings.port, reload=settings.debug)

@@ -4,17 +4,15 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
-import psycopg
-from psycopg.rows import dict_row
 from dotenv import load_dotenv
+from sqlalchemy import text
 
-load_dotenv()
+from backend.app.core.config import settings
+from backend.app.db.session import engine
 
-# Connection string. Override via DATABASE_URL in .env for production.
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "host=127.0.0.1 port=5432 user=postgres password=123 dbname=rag_system",
-)
+load_dotenv(override=True)
+
+DATABASE_URL = settings.database_url
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -138,23 +136,58 @@ def now() -> datetime:
 
 @contextmanager
 def get_db():
-    conn = psycopg.connect(DATABASE_URL, row_factory=dict_row)
-    try:
-        yield conn
-        conn.commit()
-    finally:
-        conn.close()
+    with engine.begin() as conn:
+        yield _CompatConnection(conn)
 
 
 def init_db():
-    with get_db() as conn:
-        conn.execute(SCHEMA)
-        existing = conn.execute("SELECT COUNT(*) AS c FROM plans").fetchone()["c"]
+    with engine.begin() as conn:
+        if conn.execute(text("SELECT to_regclass('public.plans')")).scalar_one() is None:
+            raise RuntimeError(
+                "Database schema is not initialized. Run "
+                "`python -m alembic upgrade head` or `python scripts/reset_postgres_schema.py` first."
+            )
+        existing = conn.execute(text("SELECT COUNT(*) AS c FROM plans")).mappings().fetchone()["c"]
         if existing == 0:
             conn.execute(
-                "INSERT INTO plans (name, price_toman, duration_days, active) VALUES (%s, %s, %s, TRUE)",
-                ("اشتراک یک ماهه", 150000, 30),
+                text("INSERT INTO plans (name, price_toman, duration_days, active) VALUES (:name, :price, :days, TRUE)"),
+                {"name": "اشتراک یک ماهه", "price": 150000, "days": 30},
             )
+
+
+class _CompatResult:
+    def __init__(self, result):
+        self._result = result
+        self.rowcount = result.rowcount
+
+    def fetchone(self):
+        return self._result.mappings().fetchone()
+
+    def fetchall(self):
+        return self._result.mappings().fetchall()
+
+
+class _CompatConnection:
+    def __init__(self, conn):
+        self._conn = conn
+
+    def execute(self, sql: str, params=None):
+        converted_sql, converted_params = _convert_psycopg_params(sql, params)
+        return _CompatResult(self._conn.execute(text(converted_sql), converted_params))
+
+
+def _convert_psycopg_params(sql: str, params=None):
+    if params is None:
+        return sql, {}
+    if not isinstance(params, (list, tuple)):
+        return sql, params
+    converted = sql
+    values = {}
+    for index, value in enumerate(params):
+        name = f"p{index}"
+        converted = converted.replace("%s", f":{name}", 1)
+        values[name] = value
+    return converted, values
 
 
 # ---- users ----
