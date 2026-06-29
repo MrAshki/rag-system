@@ -123,10 +123,39 @@ CREATE TABLE IF NOT EXISTS conversation_messages (
     sources_json TEXT,
     status TEXT NOT NULL DEFAULT 'complete',
     stream_status TEXT,
+    mode TEXT,
+    tool_id TEXT,
+    tool_title TEXT,
+    tool_params_json TEXT,
+    generated_output_id TEXT,
     created_at TIMESTAMPTZ NOT NULL
 );
+ALTER TABLE conversation_messages ADD COLUMN IF NOT EXISTS mode TEXT;
+ALTER TABLE conversation_messages ADD COLUMN IF NOT EXISTS tool_id TEXT;
+ALTER TABLE conversation_messages ADD COLUMN IF NOT EXISTS tool_title TEXT;
+ALTER TABLE conversation_messages ADD COLUMN IF NOT EXISTS tool_params_json TEXT;
+ALTER TABLE conversation_messages ADD COLUMN IF NOT EXISTS generated_output_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_conversation_messages_conversation_created
     ON conversation_messages (conversation_id, created_at);
+
+CREATE TABLE IF NOT EXISTS generated_outputs (
+    id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    content_json TEXT,
+    content_markdown TEXT NOT NULL DEFAULT '',
+    source_asset_ids_json TEXT,
+    template_id TEXT,
+    template_params_json TEXT,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_generated_outputs_user_updated
+    ON generated_outputs (user_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_generated_outputs_conversation
+    ON generated_outputs (conversation_id, updated_at DESC);
 """
 
 
@@ -552,24 +581,30 @@ def list_conversation_messages(user_id: int, conversation_id: str):
 
 def create_conversation_message(conversation_id: str, role: str, content: str = "",
                                 sources=None, status: str = "complete",
-                                stream_status: str = None):
+                                stream_status: str = None, mode: str = None,
+                                tool_id: str = None, tool_title: str = None,
+                                tool_params=None, generated_output_id: str = None):
     message_id = uuid.uuid4().hex
     ts = now()
     with get_db() as conn:
         row = conn.execute(
             """INSERT INTO conversation_messages
-                   (id, conversation_id, role, content, sources_json, status, stream_status, created_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                   (id, conversation_id, role, content, sources_json, status, stream_status,
+                    mode, tool_id, tool_title, tool_params_json, generated_output_id, created_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                RETURNING *""",
             (message_id, conversation_id, role, content or "", _encode_sources(sources),
-             status, stream_status, ts),
+             status, stream_status, mode, tool_id, tool_title,
+             json.dumps(tool_params or {}, ensure_ascii=False) if tool_params is not None else None,
+             generated_output_id, ts),
         ).fetchone()
         conn.execute("UPDATE conversations SET updated_at = %s WHERE id = %s", (ts, conversation_id))
         return row
 
 
 def update_conversation_message(conversation_id: str, message_id: str, content=None,
-                                sources=None, status=None, stream_status=None):
+                                sources=None, status=None, stream_status=None,
+                                generated_output_id=None):
     sets = []
     params = []
     if content is not None:
@@ -584,6 +619,9 @@ def update_conversation_message(conversation_id: str, message_id: str, content=N
     if stream_status is not None:
         sets.append("stream_status = %s")
         params.append(stream_status)
+    if generated_output_id is not None:
+        sets.append("generated_output_id = %s")
+        params.append(generated_output_id)
     if not sets:
         return None
     params.extend([message_id, conversation_id])
@@ -597,6 +635,45 @@ def update_conversation_message(conversation_id: str, message_id: str, content=N
         ).fetchone()
         conn.execute("UPDATE conversations SET updated_at = %s WHERE id = %s", (now(), conversation_id))
         return row
+
+
+def create_generated_output(user_id: int, conversation_id: str, output_type: str,
+                            title: str, content_markdown: str,
+                            content_json=None, source_asset_ids=None,
+                            template_id: str = None, template_params=None):
+    output_id = uuid.uuid4().hex
+    ts = now()
+    with get_db() as conn:
+        return conn.execute(
+            """INSERT INTO generated_outputs
+                   (id, user_id, conversation_id, type, title, content_json,
+                    content_markdown, source_asset_ids_json, template_id,
+                    template_params_json, created_at, updated_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               RETURNING *""",
+            (
+                output_id,
+                user_id,
+                conversation_id,
+                output_type,
+                (title or "خروجی")[:180],
+                json.dumps(content_json or {}, ensure_ascii=False) if content_json is not None else None,
+                content_markdown or "",
+                json.dumps(source_asset_ids or [], ensure_ascii=False),
+                template_id,
+                json.dumps(template_params or {}, ensure_ascii=False) if template_params is not None else None,
+                ts,
+                ts,
+            ),
+        ).fetchone()
+
+
+def get_generated_output(user_id: int, output_id: str):
+    with get_db() as conn:
+        return conn.execute(
+            "SELECT * FROM generated_outputs WHERE id = %s AND user_id = %s",
+            (output_id, user_id),
+        ).fetchone()
 
 
 def update_asset_status(asset_id: str, status: str, scan_error: str = None,

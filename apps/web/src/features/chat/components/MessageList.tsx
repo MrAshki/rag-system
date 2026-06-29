@@ -25,7 +25,13 @@ function answerNodes(content: string, sources: string[] = []) {
   return nodes;
 }
 
-export function MessageList({ messages }: { messages: ChatMessage[] }) {
+export function MessageList({
+  messages,
+  onOpenOutput,
+}: {
+  messages: ChatMessage[];
+  onOpenOutput: (message: ChatMessage) => void;
+}) {
   return (
     <div className={styles.messages}>
       {!messages.length && (
@@ -38,9 +44,17 @@ export function MessageList({ messages }: { messages: ChatMessage[] }) {
       {messages.map((message) => (
         <div className={`${styles.message} ${message.role === "user" ? styles.userMessage : styles.assistantMessage}`} key={message.id}>
           {message.role === "assistant" && message.status === "streaming" && !message.content && (
-            <span className={styles.trace}>{message.stream_status || "در حال آماده‌سازی..."}</span>
+            <span className={styles.trace}>{message.stream_status || message.streamStatus || "در حال آماده‌سازی..."}</span>
+          )}
+          {message.role === "user" && message.tool_title && (
+            <span className={styles.messageToolBadge}><AppIcon name="tools" /> {message.tool_title}</span>
           )}
           <div>{message.role === "assistant" ? answerNodes(message.content, message.sources) : message.content}</div>
+          {message.role === "assistant" && (message.generated_output_id || message.generated_output) && (
+            <button className={styles.openOutputButton} type="button" onClick={() => onOpenOutput(message)}>
+              <AppIcon name="output" /> باز کردن در Canvas
+            </button>
+          )}
         </div>
       ))}
     </div>

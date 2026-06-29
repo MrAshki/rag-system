@@ -142,9 +142,36 @@ class ConversationMessage(Base):
     sources_json: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(Text, nullable=False, default="complete")
     stream_status: Mapped[str | None] = mapped_column(Text)
+    mode: Mapped[str | None] = mapped_column(Text)
+    tool_id: Mapped[str | None] = mapped_column(Text)
+    tool_title: Mapped[str | None] = mapped_column(Text)
+    tool_params_json: Mapped[str | None] = mapped_column(Text)
+    generated_output_id: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
 
     __table_args__ = (Index("idx_conversation_messages_conversation_created", "conversation_id", "created_at"),)
+
+
+class GeneratedOutput(Base):
+    __tablename__ = "generated_outputs"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    conversation_id: Mapped[str | None] = mapped_column(ForeignKey("conversations.id", ondelete="SET NULL"))
+    type: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    content_json: Mapped[str | None] = mapped_column(Text)
+    content_markdown: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    source_asset_ids_json: Mapped[str | None] = mapped_column(Text)
+    template_id: Mapped[str | None] = mapped_column(Text)
+    template_params_json: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    __table_args__ = (
+        Index("idx_generated_outputs_user_updated", "user_id", "updated_at"),
+        Index("idx_generated_outputs_conversation", "conversation_id", "updated_at"),
+    )
 
 
 class DocumentChunk(Base):

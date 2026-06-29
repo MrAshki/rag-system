@@ -1,5 +1,5 @@
 import { apiJson } from "@/lib/api";
-import type { Asset, ChatModel, Conversation, ChatMessage } from "@/types/api";
+import type { Asset, ChatModel, ChatTool, Conversation, ChatMessage, GeneratedOutput, ExamGrade } from "@/types/api";
 
 export async function getCurrentUser() {
   return apiJson<{
@@ -13,6 +13,25 @@ export async function getCurrentUser() {
 
 export async function listChatModels() {
   return apiJson<{ models: ChatModel[] }>("/api/chat/models");
+}
+
+export async function listTools() {
+  return apiJson<{ tools: ChatTool[] }>("/api/tools");
+}
+
+export async function getGeneratedOutput(id: string) {
+  return apiJson<{ output: GeneratedOutput }>(`/api/outputs/${encodeURIComponent(id)}`);
+}
+
+export async function gradeGeneratedOutput(
+  id: string,
+  answers: Record<string, string | number>,
+  model?: { provider: string; model: string },
+) {
+  return apiJson<{ grade: ExamGrade }>(`/api/outputs/${encodeURIComponent(id)}/grade`, {
+    method: "POST",
+    body: JSON.stringify({ answers, chat_provider: model?.provider, chat_model: model?.model }),
+  });
 }
 
 export async function listConversations() {

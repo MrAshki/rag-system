@@ -1,6 +1,6 @@
 import { FormEvent, RefObject } from "react";
 import { AppIcon } from "@/components/AppIcon";
-import type { ChatModel } from "@/types/api";
+import type { ChatModel, SelectedTool } from "@/types/api";
 import styles from "@/app/page.module.css";
 
 type ChatComposerProps = {
@@ -8,6 +8,7 @@ type ChatComposerProps = {
   selectedModel: string;
   models: ChatModel[];
   selectedSourceCount: number;
+  selectedTool: SelectedTool | null;
   sourceMenuOpen: boolean;
   isSending: boolean;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
@@ -15,6 +16,8 @@ type ChatComposerProps = {
   onSubmit: (event?: FormEvent) => void;
   onToggleSourceMenu: () => void;
   onOpenSourceModal: () => void;
+  onOpenToolPicker: () => void;
+  onClearTool: () => void;
   onModelChange: (value: string) => void;
 };
 
@@ -23,6 +26,7 @@ export function ChatComposer({
   selectedModel,
   models,
   selectedSourceCount,
+  selectedTool,
   sourceMenuOpen,
   isSending,
   textareaRef,
@@ -30,14 +34,25 @@ export function ChatComposer({
   onSubmit,
   onToggleSourceMenu,
   onOpenSourceModal,
+  onOpenToolPicker,
+  onClearTool,
   onModelChange,
 }: ChatComposerProps) {
   return (
     <div className={styles.composer}>
+      {selectedTool && (
+        <div className={styles.composerMeta}>
+          <span><AppIcon name="tools" /> ابزار فعال: {selectedTool.tool.title}{selectedTool.assetIds.length ? ` · ${selectedTool.assetIds.length.toLocaleString("fa-IR")} منبع` : ""}</span>
+          <button className={styles.toolRunButton} disabled={isSending} onClick={() => onSubmit()} type="button">
+            اجرای ابزار
+          </button>
+          <button onClick={onClearTool} type="button" title="حذف ابزار"><AppIcon name="x" /></button>
+        </div>
+      )}
       <form className={styles.composerCard} onSubmit={onSubmit}>
         <div className={styles.composerLeft}>
           <div className={styles.sourceWrap}>
-            <button className={`${styles.iconButton} ${selectedSourceCount ? styles.hasSources : ""}`} type="button" onClick={onToggleSourceMenu} title="افزودن">
+            <button className={`${styles.iconButton} ${selectedSourceCount || selectedTool ? styles.hasSources : ""}`} type="button" onClick={onToggleSourceMenu} title="افزودن">
               <AppIcon name="plus" />
               {selectedSourceCount > 0 && <span>{selectedSourceCount.toLocaleString("fa-IR")}</span>}
             </button>
@@ -46,16 +61,19 @@ export function ChatComposer({
                 <button type="button" onClick={onOpenSourceModal}>
                   <AppIcon name="file" /> اضافه کردن منابع
                 </button>
+                <button type="button" onClick={onOpenToolPicker}>
+                  <AppIcon name="tools" /> انتخاب ابزار
+                </button>
               </div>
             )}
           </div>
-          <button className={styles.send} type="submit" disabled={isSending || !question.trim()} title="ارسال"><AppIcon name="send" /></button>
+          <button className={styles.send} type="submit" disabled={isSending || (!question.trim() && !selectedTool)} title="ارسال"><AppIcon name="send" /></button>
         </div>
         <textarea
           ref={textareaRef}
           value={question}
           rows={1}
-          placeholder="سؤال خود را بنویسید..."
+          placeholder={selectedTool ? "برای اجرای ابزار، ارسال را بزنید یا جزئیات بیشتری بنویسید..." : "سؤال خود را بنویسید..."}
           onChange={(event) => onQuestionChange(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {

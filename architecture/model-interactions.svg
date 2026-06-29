@@ -1,0 +1,207 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1020" viewBox="0 0 1500 1020">
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#243044" />
+    </marker>
+    <marker id="dashArrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#6b7280" />
+    </marker>
+    <style>
+      .bg { fill: #f8fafc; }
+      .title { font: 700 32px "Segoe UI", Tahoma, sans-serif; fill: #111827; }
+      .subtitle { font: 400 16px "Segoe UI", Tahoma, sans-serif; fill: #4b5563; }
+      .lane { fill: #ffffff; stroke: #d8dee9; stroke-width: 1.5; rx: 18; }
+      .laneTitle { font: 700 17px "Segoe UI", Tahoma, sans-serif; fill: #374151; }
+      .box { fill: #ffffff; stroke: #8996aa; stroke-width: 1.4; rx: 12; }
+      .boxBlue { fill: #eaf3ff; stroke: #4f83cc; }
+      .boxGreen { fill: #eaf8ef; stroke: #48a868; }
+      .boxOrange { fill: #fff4e6; stroke: #d97706; }
+      .boxPurple { fill: #f2ecff; stroke: #7c3aed; }
+      .boxRed { fill: #fff1f2; stroke: #e11d48; }
+      .db { fill: #eef2f7; stroke: #64748b; stroke-width: 1.5; }
+      .text { font: 600 15px "Segoe UI", Tahoma, sans-serif; fill: #111827; }
+      .small { font: 400 12.5px "Segoe UI", Tahoma, sans-serif; fill: #374151; }
+      .tiny { font: 400 11px "Segoe UI", Tahoma, sans-serif; fill: #4b5563; }
+      .line { fill: none; stroke: #243044; stroke-width: 2; marker-end: url(#arrow); }
+      .dashed { fill: none; stroke: #6b7280; stroke-width: 2; stroke-dasharray: 7 7; marker-end: url(#dashArrow); }
+      .label { font: 600 12px "Segoe UI", Tahoma, sans-serif; fill: #374151; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1500" height="1020" />
+  <text class="title" x="750" y="52" text-anchor="middle">RAG System - Model Interaction Graph</text>
+  <text class="subtitle" x="750" y="80" text-anchor="middle">Backend code orchestrates the models; the models do not directly call each other.</text>
+
+  <!-- Lanes -->
+  <rect class="lane" x="40" y="120" width="1420" height="155" />
+  <text class="laneTitle" x="65" y="150">Request entry</text>
+
+  <rect class="lane" x="40" y="305" width="900" height="360" />
+  <text class="laneTitle" x="65" y="335">Grounded RAG path</text>
+
+  <rect class="lane" x="980" y="305" width="480" height="360" />
+  <text class="laneTitle" x="1005" y="335">Chat model gateway</text>
+
+  <rect class="lane" x="40" y="700" width="1420" height="245" />
+  <text class="laneTitle" x="65" y="730">Document ingestion and indexing</text>
+
+  <!-- Top request path -->
+  <rect class="box boxBlue" x="80" y="170" width="145" height="64" />
+  <text class="text" x="152" y="196" text-anchor="middle">User</text>
+  <text class="small" x="152" y="216" text-anchor="middle">question + selected docs</text>
+
+  <rect class="box boxBlue" x="285" y="170" width="175" height="64" />
+  <text class="text" x="372" y="196" text-anchor="middle">Next.js UI</text>
+  <text class="small" x="372" y="216" text-anchor="middle">ChatApp / Composer</text>
+
+  <rect class="box boxBlue" x="520" y="170" width="180" height="64" />
+  <text class="text" x="610" y="196" text-anchor="middle">Next API proxy</text>
+  <text class="small" x="610" y="216" text-anchor="middle">/api/ask/stream</text>
+
+  <rect class="box boxBlue" x="760" y="170" width="190" height="64" />
+  <text class="text" x="855" y="196" text-anchor="middle">FastAPI ask.py</text>
+  <text class="small" x="855" y="216" text-anchor="middle">prepare mode + persist</text>
+
+  <polygon class="box boxOrange" points="1040,170 1125,202 1040,234 955,202" />
+  <text class="text" x="1040" y="198" text-anchor="middle">mode?</text>
+  <text class="tiny" x="1040" y="216" text-anchor="middle">free / RAG / tool</text>
+
+  <path class="line" d="M225 202 H285" />
+  <path class="line" d="M460 202 H520" />
+  <path class="line" d="M700 202 H760" />
+  <path class="line" d="M950 202 H955" />
+
+  <path class="line" d="M1040 234 V290 H520 V352" />
+  <text class="label" x="545" y="292">grounded_chat</text>
+  <path class="line" d="M1125 202 H1195 V352" />
+  <text class="label" x="1210" y="292">provider selected once</text>
+  <path class="line" d="M1040 170 V118 H1220 V352" />
+  <text class="label" x="1235" y="145">free_chat uses ChatProvider directly</text>
+
+  <!-- RAG path -->
+  <rect class="box boxPurple" x="80" y="370" width="170" height="70" />
+  <text class="text" x="165" y="396" text-anchor="middle">understand_query</text>
+  <text class="small" x="165" y="416" text-anchor="middle">LLM JSON search query</text>
+
+  <rect class="box boxGreen" x="305" y="370" width="155" height="70" />
+  <text class="text" x="382" y="396" text-anchor="middle">bge-m3</text>
+  <text class="small" x="382" y="416" text-anchor="middle">embed query</text>
+
+  <path class="db" d="M525 370 h170 a18 18 0 0 1 18 18 v34 a18 18 0 0 1 -18 18 h-170 a18 18 0 0 1 -18 -18 v-34 a18 18 0 0 1 18 -18 z" />
+  <text class="text" x="610" y="396" text-anchor="middle">pgvector</text>
+  <text class="small" x="610" y="416" text-anchor="middle">dense search over chunks</text>
+
+  <rect class="box boxGreen" x="760" y="370" width="145" height="70" />
+  <text class="text" x="832" y="396" text-anchor="middle">reranker</text>
+  <text class="small" x="832" y="416" text-anchor="middle">bge-reranker-v2-m3</text>
+
+  <rect class="box boxPurple" x="190" y="525" width="210" height="70" />
+  <text class="text" x="295" y="551" text-anchor="middle">answer prompt</text>
+  <text class="small" x="295" y="571" text-anchor="middle">context + citation rules</text>
+
+  <rect class="box boxBlue" x="470" y="525" width="170" height="70" />
+  <text class="text" x="555" y="551" text-anchor="middle">stream/final</text>
+  <text class="small" x="555" y="571" text-anchor="middle">answer + sources</text>
+
+  <path class="line" d="M250 405 H305" />
+  <path class="line" d="M460 405 H507" />
+  <path class="line" d="M713 405 H760" />
+  <path class="line" d="M832 440 V495 H295 V525" />
+  <path class="line" d="M400 560 H470" />
+  <path class="line" d="M640 560 H815 V234" />
+
+  <!-- Tool path -->
+  <rect class="box boxOrange" x="700" y="525" width="180" height="70" />
+  <text class="text" x="790" y="551" text-anchor="middle">tool_runner</text>
+  <text class="small" x="790" y="571" text-anchor="middle">summary / exam / generic</text>
+  <path class="line" d="M1040 234 V610 H790 V595" />
+  <path class="line" d="M790 525 V485 H382 V440" />
+  <path class="line" d="M880 560 H1000" />
+
+  <!-- Gateway -->
+  <rect class="box boxPurple" x="1025" y="370" width="200" height="70" />
+  <text class="text" x="1125" y="396" text-anchor="middle">model_gateway</text>
+  <text class="small" x="1125" y="416" text-anchor="middle">get_chat_provider()</text>
+
+  <rect class="box boxPurple" x="1270" y="370" width="145" height="70" />
+  <text class="text" x="1342" y="396" text-anchor="middle">ChatProvider</text>
+  <text class="small" x="1342" y="416" text-anchor="middle">chat / stream_chat</text>
+
+  <rect class="box" x="1060" y="500" width="130" height="55" />
+  <text class="text" x="1125" y="523" text-anchor="middle">Ollama</text>
+  <text class="tiny" x="1125" y="542" text-anchor="middle">gemma3:12b</text>
+
+  <rect class="box" x="1210" y="500" width="130" height="55" />
+  <text class="text" x="1275" y="523" text-anchor="middle">Gemini</text>
+  <text class="tiny" x="1275" y="542" text-anchor="middle">API key gated</text>
+
+  <rect class="box" x="1360" y="500" width="80" height="55" />
+  <text class="text" x="1400" y="523" text-anchor="middle">DeepSeek</text>
+  <text class="tiny" x="1400" y="542" text-anchor="middle">API</text>
+
+  <path class="line" d="M1225 405 H1270" />
+  <path class="line" d="M1342 440 V470 H1125 V500" />
+  <path class="line" d="M1342 440 V470 H1275 V500" />
+  <path class="line" d="M1342 440 V470 H1400 V500" />
+  <path class="line" d="M1195 352 V370" />
+  <path class="line" d="M165 370 V330 H1025" />
+  <path class="line" d="M295 525 V485 H1025" />
+
+  <path class="db" d="M1145 600 h230 a18 18 0 0 1 18 18 v30 a18 18 0 0 1 -18 18 h-230 a18 18 0 0 1 -18 -18 v-30 a18 18 0 0 1 18 -18 z" />
+  <text class="text" x="1260" y="625" text-anchor="middle">PostgreSQL</text>
+  <text class="small" x="1260" y="644" text-anchor="middle">messages + generated_outputs</text>
+  <path class="line" d="M855 234 V633 H1127" />
+  <path class="line" d="M1185 555 V600" />
+  <path class="line" d="M1275 555 V600" />
+  <path class="line" d="M1400 555 V600" />
+
+  <!-- Ingestion -->
+  <rect class="box boxBlue" x="80" y="765" width="135" height="62" />
+  <text class="text" x="147" y="790" text-anchor="middle">Upload</text>
+  <text class="small" x="147" y="810" text-anchor="middle">gallery route</text>
+
+  <path class="db" d="M265 765 h135 a16 16 0 0 1 16 16 v30 a16 16 0 0 1 -16 16 h-135 a16 16 0 0 1 -16 -16 v-30 a16 16 0 0 1 16 -16 z" />
+  <text class="text" x="332" y="790" text-anchor="middle">assets queue</text>
+  <text class="small" x="332" y="810" text-anchor="middle">uploaded/scanning</text>
+
+  <rect class="box boxBlue" x="465" y="765" width="145" height="62" />
+  <text class="text" x="537" y="790" text-anchor="middle">scan_worker</text>
+  <text class="small" x="537" y="810" text-anchor="middle">background thread</text>
+
+  <rect class="box boxOrange" x="660" y="765" width="165" height="62" />
+  <text class="text" x="742" y="790" text-anchor="middle">normalize</text>
+  <text class="small" x="742" y="810" text-anchor="middle">TXT / PDF / DOCX</text>
+
+  <rect class="box boxRed" x="660" y="865" width="165" height="50" />
+  <text class="text" x="742" y="886" text-anchor="middle">OCR fallback</text>
+  <text class="tiny" x="742" y="904" text-anchor="middle">Tesseract for PDFs</text>
+
+  <rect class="box boxPurple" x="875" y="865" width="185" height="50" />
+  <text class="text" x="967" y="886" text-anchor="middle">LLM normalize</text>
+  <text class="tiny" x="967" y="904" text-anchor="middle">optional labels only</text>
+
+  <rect class="box boxOrange" x="875" y="765" width="150" height="62" />
+  <text class="text" x="950" y="790" text-anchor="middle">chunker</text>
+  <text class="small" x="950" y="810" text-anchor="middle">heading/page aware</text>
+
+  <rect class="box boxGreen" x="1075" y="765" width="145" height="62" />
+  <text class="text" x="1147" y="790" text-anchor="middle">bge-m3</text>
+  <text class="small" x="1147" y="810" text-anchor="middle">embed chunks</text>
+
+  <path class="db" d="M1275 765 h135 a16 16 0 0 1 16 16 v30 a16 16 0 0 1 -16 16 h-135 a16 16 0 0 1 -16 -16 v-30 a16 16 0 0 1 16 -16 z" />
+  <text class="text" x="1342" y="790" text-anchor="middle">document_chunks</text>
+  <text class="small" x="1342" y="810" text-anchor="middle">Postgres + pgvector</text>
+
+  <path class="line" d="M215 796 H249" />
+  <path class="line" d="M416 796 H465" />
+  <path class="line" d="M610 796 H660" />
+  <path class="line" d="M825 796 H875" />
+  <path class="line" d="M1025 796 H1075" />
+  <path class="line" d="M1220 796 H1259" />
+  <path class="dashed" d="M742 827 V865" />
+  <path class="dashed" d="M825 890 H875" />
+  <path class="dashed" d="M967 865 V842 H742 V827" />
+  <path class="line" d="M1342 765 V675 H610 V440" />
+
+  <text class="tiny" x="80" y="970">Dashed arrows are optional/fallback flows. `llm_normalize` never writes generated text into the document; it only changes structural labels.</text>
+</svg>

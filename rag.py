@@ -674,6 +674,7 @@ def answer_request(
     selected_source: str = None,
     chat_provider_name: str = None,
     chat_model: str = None,
+    generation_question: str = None,
 ) -> Dict:
     """End-to-end answer pipeline used by the app:
         understand the message -> for each distinct question, retrieve its own context
@@ -689,8 +690,9 @@ def answer_request(
     if asset_ids:
         scope = "selected"
     provider = get_chat_provider(chat_provider_name, chat_model)
+    generation_question = generation_question or question
     if not doc_filters and not doc_filter:
-        return generate_free_response(question, chat_provider=provider)
+        return generate_free_response(generation_question, chat_provider=provider)
 
     sub_qs = understand_query(question, chat_provider=provider)
 
@@ -703,7 +705,7 @@ def answer_request(
             user_id=user_id,
         )
         return generate_response(
-            sq["user_question"],
+            generation_question,
             chunks,
             scope=scope,
             selected_source=selected_source,
@@ -744,6 +746,7 @@ def answer_request_stream(
     selected_source: str = None,
     chat_provider_name: str = None,
     chat_model: str = None,
+    generation_question: str = None,
 ) -> Iterable[Dict]:
     """Streaming twin of answer_request.
 
@@ -760,12 +763,13 @@ def answer_request_stream(
     if asset_ids:
         scope = "selected"
     provider = get_chat_provider(chat_provider_name, chat_model)
+    generation_question = generation_question or question
     yield _trace("request", "started")
 
     if not doc_filters and not doc_filter:
         yield _trace("generate", "started", provider=provider.name, model=provider.model, mode="free_chat")
         final_event = None
-        for event in generate_free_response_stream(question, chat_provider=provider):
+        for event in generate_free_response_stream(generation_question, chat_provider=provider):
             if event.get("type") == "final":
                 final_event = event
             else:
@@ -799,7 +803,7 @@ def answer_request_stream(
         )
         final_event = None
         for event in generate_response_stream(
-            sq["user_question"],
+            generation_question,
             chunks,
             scope=scope,
             selected_source=selected_source,

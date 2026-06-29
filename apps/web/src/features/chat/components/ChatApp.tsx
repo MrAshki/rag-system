@@ -4,14 +4,16 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
 import { logout } from "@/features/auth/api";
-import type { Asset, ChatMessage, ChatModel, Conversation, StreamEvent } from "@/types/api";
+import type { Asset, ChatMessage, ChatModel, ChatTool, Conversation, GeneratedOutput, SelectedTool, StreamEvent } from "@/types/api";
 import {
   createConversationApi,
   deleteConversationApi,
   getConversationMessages,
+  getGeneratedOutput,
   listAssets,
   listChatModels,
   listConversations,
+  listTools,
   renameConversationApi,
   updateConversationModelApi,
   uploadAsset,
@@ -19,8 +21,10 @@ import {
 import { ChatComposer } from "@/features/chat/components/ChatComposer";
 import { ConversationRail } from "@/features/chat/components/ConversationRail";
 import { MessageList } from "@/features/chat/components/MessageList";
+import { OutputCanvas } from "@/features/chat/components/OutputCanvas";
 import { SourceModal } from "@/features/chat/components/SourceModal";
 import { ToolsSidebar } from "@/features/chat/components/ToolsSidebar";
+import { ToolPickerModal } from "@/features/chat/components/ToolPickerModal";
 import { assetIsSelectable } from "@/features/chat/utils/assets";
 import { traceLabel } from "@/features/chat/utils/stream";
 import styles from "@/app/page.module.css";
@@ -34,14 +38,18 @@ type ChatAppProps = {
 
 export function ChatApp({ user }: ChatAppProps) {
   const [models, setModels] = useState<ChatModel[]>([]);
+  const [tools, setTools] = useState<ChatTool[]>([]);
   const [selectedModel, setSelectedModel] = useState("ollama|gemma3:12b");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
   const [assets, setAssets] = useState<Asset[]>([]);
   const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
+  const [selectedTool, setSelectedTool] = useState<SelectedTool | null>(null);
   const [sourceMenuOpen, setSourceMenuOpen] = useState(false);
   const [sourceModalOpen, setSourceModalOpen] = useState(false);
+  const [toolPickerOpen, setToolPickerOpen] = useState(false);
+  const [activeOutput, setActiveOutput] = useState<GeneratedOutput | null>(null);
   const [sourceQuery, setSourceQuery] = useState("");
   const [status, setStatus] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -59,9 +67,19 @@ export function ChatApp({ user }: ChatAppProps) {
     [assets, selectedAssetIds],
   );
 
+  const activeAssetIds = useMemo(
+    () => selectedTool ? new Set(selectedTool.assetIds) : selectedAssetIds,
+    [selectedAssetIds, selectedTool],
+  );
+
+  const activeAssets = useMemo(
+    () => assets.filter((asset) => activeAssetIds.has(asset.id)),
+    [activeAssetIds, assets],
+  );
+
   async function bootstrap() {
     try {
-      await Promise.all([loadModels(), loadConversations(), loadAssets()]);
+      await Promise.all([loadModels(), loadTools(), loadConversations(), loadAssets()]);
     } catch {
       setStatus("خطا در دریافت اطلاعات اولیه.");
     }
@@ -72,6 +90,11 @@ export function ChatApp({ user }: ChatAppProps) {
     setModels(data.models || []);
     const preferred = (data.models || []).find((model) => model.default && model.enabled) || (data.models || []).find((model) => model.enabled);
     if (preferred) setSelectedModel(`${preferred.provider}|${preferred.model}`);
+  }
+
+  async function loadTools() {
+    const data = await listTools();
+    setTools(data.tools || []);
   }
 
   async function loadConversations() {
@@ -185,10 +208,24 @@ export function ChatApp({ user }: ChatAppProps) {
     }
   }
 
+  async function openOutput(message: ChatMessage) {
+    if (message.generated_output) {
+      setActiveOutput(message.generated_output);
+      return;
+    }
+    if (!message.generated_output_id) return;
+    try {
+      const data = await getGeneratedOutput(message.generated_output_id);
+      setActiveOutput(data.output);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "خطا در باز کردن خروجی");
+    }
+  }
+
   async function submitQuestion(event?: FormEvent) {
     event?.preventDefault();
     const text = question.trim();
-    if (!text || isSending) return;
+    if ((!text && !selectedTool) || isSending) return;
     setIsSending(true);
     setQuestion("");
     let conversationId = activeConversationId || await createConversation();
@@ -203,7 +240,9 @@ export function ChatApp({ user }: ChatAppProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           question: text,
-          asset_ids: [...selectedAssetIds],
+          asset_ids: [...activeAssetIds],
+          tool_id: selectedTool?.tool.id,
+          tool_params: selectedTool?.params,
           conversation_id: conversationId,
           chat_provider: provider,
           chat_model: modelParts.join("|"),
@@ -230,7 +269,17 @@ export function ChatApp({ user }: ChatAppProps) {
           upsertMessage(conversationId, { id: assistantId, role: "assistant", content: answer, status: "streaming", stream_status: null });
         } else if (streamEvent.type === "final" && assistantId) {
           answer = answer || streamEvent.answer || "";
-          upsertMessage(conversationId, { id: assistantId, role: "assistant", content: answer, sources: streamEvent.sources || [], status: "complete", stream_status: null });
+          if (streamEvent.generated_output) setActiveOutput(streamEvent.generated_output);
+          upsertMessage(conversationId, {
+            id: assistantId,
+            role: "assistant",
+            content: answer,
+            sources: streamEvent.sources || [],
+            status: "complete",
+            stream_status: null,
+            generated_output_id: streamEvent.generated_output?.id,
+            generated_output: streamEvent.generated_output || null,
+          });
         } else if (streamEvent.type === "error" && assistantId) {
           upsertMessage(conversationId, { id: assistantId, role: "assistant", content: streamEvent.error || "خطا در تولید پاسخ.", status: "error" });
         }
@@ -314,17 +363,18 @@ export function ChatApp({ user }: ChatAppProps) {
             <div>
               <h1>چت هوشمند</h1>
               <p>بدون منبع برای چت آزاد، یا با انتخاب اسناد برای پاسخ مستند.</p>
-              <span className={styles.mode}>{selectedAssets.length ? `حالت مستند: ${selectedAssets.length.toLocaleString("fa-IR")} منبع` : "حالت چت آزاد"}</span>
+              <span className={styles.mode}>{activeAssets.length ? `حالت مستند: ${activeAssets.length.toLocaleString("fa-IR")} منبع` : "حالت چت آزاد"}</span>
             </div>
           </div>
 
-          <MessageList messages={messages} />
+          <MessageList messages={messages} onOpenOutput={(message) => void openOutput(message)} />
 
           <ChatComposer
             question={question}
             selectedModel={selectedModel}
             models={models}
-            selectedSourceCount={selectedAssets.length}
+            selectedSourceCount={activeAssets.length}
+            selectedTool={selectedTool}
             sourceMenuOpen={sourceMenuOpen}
             isSending={isSending}
             textareaRef={textareaRef}
@@ -332,6 +382,8 @@ export function ChatApp({ user }: ChatAppProps) {
             onSubmit={(event) => void submitQuestion(event)}
             onToggleSourceMenu={() => setSourceMenuOpen((value) => !value)}
             onOpenSourceModal={() => { setSourceMenuOpen(false); setSourceModalOpen(true); void loadAssets(); }}
+            onOpenToolPicker={() => { setSourceMenuOpen(false); setToolPickerOpen(true); }}
+            onClearTool={() => setSelectedTool(null)}
             onModelChange={(value) => void updateConversationModel(value)}
           />
           {status && <div className={styles.status}>{status}</div>}
@@ -361,6 +413,18 @@ export function ChatApp({ user }: ChatAppProps) {
         />
       )}
 
+      {toolPickerOpen && (
+        <ToolPickerModal
+          tools={tools}
+          assets={assets}
+          selectedTool={selectedTool}
+          selectedAssetIds={selectedAssetIds}
+          onClose={() => setToolPickerOpen(false)}
+          onConfirm={(selection) => { setSelectedTool(selection); setToolPickerOpen(false); }}
+          onClear={() => { setSelectedTool(null); setToolPickerOpen(false); }}
+        />
+      )}
+
       <input
         ref={fileInputRef}
         type="file"
@@ -372,6 +436,7 @@ export function ChatApp({ user }: ChatAppProps) {
           event.currentTarget.value = "";
         }}
       />
+      {activeOutput && <OutputCanvas output={activeOutput} selectedModel={selectedModel} onClose={() => setActiveOutput(null)} />}
     </main>
   );
 }

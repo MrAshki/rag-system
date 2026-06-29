@@ -9,11 +9,37 @@ from backend.app.api.responses import error_response
 from backend.app.dependencies import enforce_rate_limit, require_subscription
 from backend.app.services.serializers import (
     conversation_to_json,
+    generated_output_to_json,
     message_to_json,
     selected_assets_from_payload,
 )
+from backend.app.services.tool_runner import run_tool, run_tool_stream
+from backend.app.services.tools import (
+    default_tool_request,
+    get_tool,
+    prepare_tool_request,
+    prepare_tool_search_query,
+    validate_tool_params,
+)
 
 router = APIRouter()
+
+
+def _create_tool_output(user_id: int, conversation_id: str, payload: dict, answer: str, content_json=None):
+    if not payload.get("tool"):
+        return None
+    row = db.create_generated_output(
+        user_id,
+        conversation_id,
+        output_type=payload["tool_id"],
+        title=payload["tool_title"] or payload["tool"]["title"],
+        content_markdown=answer,
+        content_json=content_json or {"markdown": answer},
+        source_asset_ids=payload["asset_ids"],
+        template_id=payload["tool_id"],
+        template_params=payload["tool_params"],
+    )
+    return generated_output_to_json(row)
 
 
 def _prepare_ask(user, data: dict):
@@ -24,10 +50,10 @@ def _prepare_ask(user, data: dict):
     chat_provider = data.get("chat_provider")
     chat_model = data.get("chat_model")
     conversation_id = data.get("conversation_id")
+    tool_id = data.get("tool_id")
+    tool_params = data.get("tool_params")
     asset_ids, selected_asset_names, asset_error = selected_assets_from_payload(user["id"], data)
 
-    if not question:
-        return None, error_response("سوال خالی است")
     if asset_error:
         return None, error_response(asset_error)
     if scope == "selected" and not document_id and not asset_ids:
@@ -37,8 +63,32 @@ def _prepare_ask(user, data: dict):
         document_id = None
         document_name = "، ".join(selected_asset_names)
 
+    tool = None
+    clean_tool_id = str(tool_id or "").strip()
+    if clean_tool_id:
+        tool = get_tool(clean_tool_id)
+        if not tool:
+            return None, error_response("ابزار انتخاب‌شده نامعتبر است")
+        if tool.get("requires_assets") and not asset_ids and not document_id:
+            return None, error_response("این ابزار به انتخاب منبع نیاز دارد.")
+        tool_params, params_error = validate_tool_params(tool, tool_params)
+        if params_error:
+            return None, error_response(params_error)
+
+    if not question:
+        if not tool:
+            return None, error_response("سوال خالی است")
+        question = default_tool_request(tool)
+
+    mode = "template_workflow" if tool else ("grounded_chat" if asset_ids or document_id else "free_chat")
+    runtime_question = prepare_tool_request(question, tool, tool_params, bool(asset_ids or document_id))
+    search_question = prepare_tool_search_query(question, tool, tool_params)
+
     return {
         "question": question,
+        "runtime_question": runtime_question,
+        "search_question": search_question,
+        "mode": mode,
         "scope": scope,
         "document_id": document_id,
         "document_name": document_name,
@@ -46,6 +96,10 @@ def _prepare_ask(user, data: dict):
         "chat_model": chat_model,
         "conversation_id": conversation_id,
         "asset_ids": asset_ids,
+        "tool": tool,
+        "tool_id": tool["id"] if tool else None,
+        "tool_title": tool["title"] if tool else None,
+        "tool_params": tool_params if tool else None,
     }, None
 
 
@@ -100,20 +154,49 @@ def ask(request: Request, data: dict = Body(default_factory=dict), user=Depends(
         return error
     chat_provider, chat_model = model_pair
 
-    db.create_conversation_message(conversation_id, "user", payload["question"])
+    db.create_conversation_message(
+        conversation_id,
+        "user",
+        payload["question"],
+        tool_id=payload["tool_id"],
+        tool_title=payload["tool_title"],
+        tool_params=payload["tool_params"],
+        mode=payload["mode"],
+    )
     if conversation["title"] == "گفتگوی جدید":
         conversation = db.update_conversation(user["id"], conversation_id, title=payload["question"][:42])
 
     try:
-        result = rag.answer_request(
-            payload["question"],
-            scope=payload["scope"],
-            document_id=payload["document_id"],
-            asset_ids=payload["asset_ids"],
-            user_id=user["id"],
-            selected_source=payload["document_name"],
-            chat_provider_name=chat_provider,
-            chat_model=chat_model,
+        if payload["tool"]:
+            result = run_tool(
+                payload["tool"],
+                payload["tool_params"],
+                payload["question"],
+                document_id=payload["document_id"],
+                asset_ids=payload["asset_ids"],
+                user_id=user["id"],
+                selected_source=payload["document_name"],
+                chat_provider_name=chat_provider,
+                chat_model=chat_model,
+            )
+        else:
+            result = rag.answer_request(
+                payload["search_question"],
+                scope=payload["scope"],
+                document_id=payload["document_id"],
+                asset_ids=payload["asset_ids"],
+                user_id=user["id"],
+                selected_source=payload["document_name"],
+                chat_provider_name=chat_provider,
+                chat_model=chat_model,
+                generation_question=payload["runtime_question"],
+            )
+        generated_output = _create_tool_output(
+            user["id"],
+            conversation_id,
+            payload,
+            result.get("answer", ""),
+            content_json=result.get("content_json"),
         )
         db.create_conversation_message(
             conversation_id,
@@ -121,6 +204,11 @@ def ask(request: Request, data: dict = Body(default_factory=dict), user=Depends(
             result.get("answer", ""),
             sources=result.get("sources", []),
             status="complete",
+            mode=payload["mode"],
+            tool_id=payload["tool_id"],
+            tool_title=payload["tool_title"],
+            tool_params=payload["tool_params"],
+            generated_output_id=generated_output["id"] if generated_output else None,
         )
     except Exception:
         db.create_conversation_message(
@@ -128,9 +216,15 @@ def ask(request: Request, data: dict = Body(default_factory=dict), user=Depends(
             "assistant",
             "خطا در تولید پاسخ.",
             status="error",
+            mode=payload["mode"],
+            tool_id=payload["tool_id"],
+            tool_title=payload["tool_title"],
+            tool_params=payload["tool_params"],
         )
         raise
     result["conversation"] = conversation_to_json(conversation)
+    if payload["tool"]:
+        result["generated_output"] = generated_output
     return result
 
 
@@ -147,7 +241,15 @@ def ask_stream(request: Request, data: dict = Body(default_factory=dict), user=D
         return error
     chat_provider, chat_model = model_pair
 
-    user_message = db.create_conversation_message(conversation_id, "user", payload["question"])
+    user_message = db.create_conversation_message(
+        conversation_id,
+        "user",
+        payload["question"],
+        tool_id=payload["tool_id"],
+        tool_title=payload["tool_title"],
+        tool_params=payload["tool_params"],
+        mode=payload["mode"],
+    )
     if conversation["title"] == "گفتگوی جدید":
         conversation = db.update_conversation(user_id, conversation_id, title=payload["question"][:42])
     assistant_message = db.create_conversation_message(
@@ -156,6 +258,10 @@ def ask_stream(request: Request, data: dict = Body(default_factory=dict), user=D
         "",
         status="streaming",
         stream_status="در حال آماده‌سازی...",
+        mode=payload["mode"],
+        tool_id=payload["tool_id"],
+        tool_title=payload["tool_title"],
+        tool_params=payload["tool_params"],
     )
 
     def event_stream():
@@ -169,28 +275,54 @@ def ask_stream(request: Request, data: dict = Body(default_factory=dict), user=D
                 "user_message": message_to_json(user_message),
                 "assistant_message": message_to_json(assistant_message),
             }, ensure_ascii=False) + "\n"
-            for event in rag.answer_request_stream(
-                payload["question"],
-                scope=payload["scope"],
-                document_id=payload["document_id"],
-                asset_ids=payload["asset_ids"],
-                user_id=user_id,
-                selected_source=payload["document_name"],
-                chat_provider_name=chat_provider,
-                chat_model=chat_model,
-            ):
+            events = (
+                run_tool_stream(
+                    payload["tool"],
+                    payload["tool_params"],
+                    payload["question"],
+                    document_id=payload["document_id"],
+                    asset_ids=payload["asset_ids"],
+                    user_id=user_id,
+                    selected_source=payload["document_name"],
+                    chat_provider_name=chat_provider,
+                    chat_model=chat_model,
+                )
+                if payload["tool"]
+                else rag.answer_request_stream(
+                    payload["search_question"],
+                    scope=payload["scope"],
+                    document_id=payload["document_id"],
+                    asset_ids=payload["asset_ids"],
+                    user_id=user_id,
+                    selected_source=payload["document_name"],
+                    chat_provider_name=chat_provider,
+                    chat_model=chat_model,
+                    generation_question=payload["runtime_question"],
+                )
+            )
+            for event in events:
                 if event.get("type") == "token":
                     answer_text += event.get("delta") or ""
                 elif event.get("type") == "final":
                     if not answer_text and event.get("answer"):
                         answer_text = event["answer"]
                     final_sources = event.get("sources") or []
+                    generated_output = _create_tool_output(
+                        user_id,
+                        conversation_id,
+                        payload,
+                        answer_text,
+                        content_json=event.get("content_json"),
+                    )
+                    if generated_output:
+                        event["generated_output"] = generated_output
                     db.update_conversation_message(
                         conversation_id,
                         assistant_message["id"],
                         content=answer_text,
                         sources=final_sources,
                         status="complete",
+                        generated_output_id=generated_output["id"] if generated_output else None,
                     )
                 elif event.get("type") == "error":
                     db.update_conversation_message(

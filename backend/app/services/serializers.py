@@ -1,6 +1,13 @@
 import json
 
 
+def _row_get(row, key, default=None):
+    try:
+        return row[key]
+    except Exception:
+        return default
+
+
 def asset_to_json(a) -> dict:
     return {
         "id": a["id"],
@@ -29,9 +36,13 @@ def conversation_to_json(row) -> dict:
 
 def message_to_json(row) -> dict:
     try:
-        sources = json.loads(row["sources_json"] or "[]")
+        sources = json.loads(_row_get(row, "sources_json") or "[]")
     except Exception:
         sources = []
+    try:
+        tool_params = json.loads(_row_get(row, "tool_params_json") or "{}")
+    except Exception:
+        tool_params = {}
     return {
         "id": row["id"],
         "role": row["role"],
@@ -39,7 +50,39 @@ def message_to_json(row) -> dict:
         "sources": sources,
         "status": row["status"],
         "streamStatus": row["stream_status"],
+        "mode": _row_get(row, "mode"),
+        "tool_id": _row_get(row, "tool_id"),
+        "tool_title": _row_get(row, "tool_title"),
+        "tool_params": tool_params,
+        "generated_output_id": _row_get(row, "generated_output_id"),
         "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+    }
+
+
+def generated_output_to_json(row) -> dict:
+    try:
+        content_json = json.loads(_row_get(row, "content_json") or "{}")
+    except Exception:
+        content_json = {}
+    try:
+        source_asset_ids = json.loads(_row_get(row, "source_asset_ids_json") or "[]")
+    except Exception:
+        source_asset_ids = []
+    try:
+        template_params = json.loads(_row_get(row, "template_params_json") or "{}")
+    except Exception:
+        template_params = {}
+    return {
+        "id": row["id"],
+        "type": row["type"],
+        "title": row["title"],
+        "content_json": content_json,
+        "content_markdown": row["content_markdown"],
+        "source_asset_ids": source_asset_ids,
+        "template_id": row["template_id"],
+        "template_params": template_params,
+        "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+        "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
     }
 
 

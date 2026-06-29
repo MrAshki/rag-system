@@ -22,6 +22,7 @@ import {
   Share2,
   Sparkles,
   SplitSquareHorizontal,
+  WandSparkles,
   Sun,
   Trash2,
   Type,
@@ -66,7 +67,9 @@ type AppIconName =
   | "video"
   | "stt"
   | "tts"
-  | "provider";
+  | "provider"
+  | "studio"
+  | "tools";
 
 export function AppIcon({ name }: { name: AppIconName }) {
   const props = { "aria-hidden": true, focusable: false } as const;
@@ -104,5 +107,7 @@ export function AppIcon({ name }: { name: AppIconName }) {
   if (name === "stt") return <AudioLines {...props} />;
   if (name === "tts") return <Type {...props} />;
   if (name === "provider") return <Blocks {...props} />;
+  if (name === "studio") return <WandSparkles {...props} />;
+  if (name === "tools") return <Sparkles {...props} />;
   return <Sparkles {...props} />;
 }

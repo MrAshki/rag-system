@@ -1,6 +1,8 @@
 import type { StreamEvent } from "@/types/api";
 
 export function traceLabel(event: Extract<StreamEvent, { type: "trace" }>) {
+  if (event.stage === "tool" && event.tool_id === "exam_generation") return "در حال تولید آزمون";
+  if (event.stage === "tool") return "اجرای ابزار";
   if (event.stage === "request") return "آماده‌سازی";
   if (event.stage === "understand_query") return event.status === "done" ? "سؤال تحلیل شد" : "تحلیل سؤال";
   if (event.stage === "retrieve") {

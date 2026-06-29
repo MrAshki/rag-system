@@ -119,6 +119,126 @@
   scrollbar-width: none;
 }
 
+.navIntro {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 8px 16px;
+}
+
+.navIntro > span {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  color: var(--on-primary);
+  background: var(--primary);
+}
+
+.navIntro svg {
+  width: 21px;
+  height: 21px;
+}
+
+.navIntro b,
+.navIntro small {
+  display: block;
+}
+
+.navIntro b {
+  font-size: 14px;
+}
+
+.navIntro small {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.mainNav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 14px;
+}
+
+.navRow {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: var(--radius);
+  color: var(--foreground);
+  padding: 9px;
+  transition: background var(--transition), color var(--transition);
+}
+
+.navRow:hover {
+  background: var(--muted);
+}
+
+.navIcon {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+  background: var(--muted);
+}
+
+.navIcon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.navText {
+  min-width: 0;
+  flex: 1;
+}
+
+.navText strong,
+.navText small {
+  display: block;
+}
+
+.navText strong {
+  font-size: 13px;
+}
+
+.navText small {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.7;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activeNavRow {
+  color: var(--primary-hover);
+  background: var(--primary-soft);
+}
+
+.activeNavRow .navIcon {
+  color: var(--on-primary);
+  background: var(--primary);
+}
+
+.disabledNavRow {
+  cursor: default;
+}
+
+.disabledNavRow .navText strong {
+  color: var(--muted-foreground);
+}
+
 .tools::-webkit-scrollbar,
 .messages::-webkit-scrollbar,
 .conversationList::-webkit-scrollbar,
@@ -370,6 +490,25 @@
   font-size: 15px;
 }
 
+.messageToolBadge {
+  width: fit-content;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  border-radius: var(--radius-full);
+  color: var(--on-primary);
+  background: rgba(255, 255, 255, 0.18);
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.messageToolBadge svg {
+  width: 13px;
+  height: 13px;
+}
+
 .userMessage {
   align-self: flex-start;
   max-width: 76%;
@@ -408,10 +547,87 @@
   cursor: help;
 }
 
+.openOutputButton {
+  width: fit-content;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  color: var(--primary-hover);
+  background: var(--primary-soft);
+  padding: 6px 11px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.openOutputButton svg {
+  width: 15px;
+  height: 15px;
+}
+
 .composer {
   border-top: 1px solid var(--border);
   background: var(--composer-bg);
   padding: 12px 28px 18px;
+}
+
+.composerMeta {
+  width: min(980px, 100%);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 0 auto 8px;
+}
+
+.composerMeta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-full);
+  color: var(--primary-hover);
+  background: var(--primary-soft);
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.composerMeta svg {
+  width: 14px;
+  height: 14px;
+}
+
+.composerMeta button {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-full);
+  color: var(--muted-foreground);
+  background: var(--muted);
+  cursor: pointer;
+}
+
+.composerMeta .toolRunButton {
+  width: auto;
+  min-height: 30px;
+  border-radius: var(--radius-full);
+  color: var(--on-primary);
+  background: var(--primary);
+  padding: 4px 11px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.composerMeta .toolRunButton:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .composerCard {
@@ -795,6 +1011,18 @@
   box-shadow: var(--shadow-lg);
 }
 
+.toolModal {
+  width: min(980px, calc(100vw - 32px));
+  max-height: min(780px, calc(100dvh - 48px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
 .modalHead {
   display: flex;
   align-items: flex-start;
@@ -828,6 +1056,305 @@
 .modalHead svg {
   width: 18px;
   height: 18px;
+}
+
+.toolPickerBody {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  flex: 1;
+}
+
+.toolPickerList {
+  overflow: auto;
+  border-left: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 14px;
+}
+
+.toolPickerList h3 {
+  margin: 12px 4px 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.toolChoice {
+  width: 100%;
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--foreground);
+  background: transparent;
+  padding: 8px;
+  cursor: pointer;
+  text-align: right;
+}
+
+.toolChoice:hover,
+.activeToolChoice {
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+.activeToolChoice {
+  color: var(--primary-hover);
+}
+
+.toolChoice > span,
+.toolDetailHead > span {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.toolChoice svg,
+.toolDetailHead svg {
+  width: 17px;
+  height: 17px;
+}
+
+.toolChoice strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolChoice small {
+  border-radius: var(--radius-full);
+  color: var(--muted-foreground);
+  background: var(--muted);
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.toolPickerForm {
+  min-width: 0;
+  overflow: auto;
+  padding: 22px;
+}
+
+.toolDetailHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.toolDetailHead h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.toolDetailHead p {
+  margin: 5px 0 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.toolWarning {
+  border: 1px solid color-mix(in srgb, var(--warning) 60%, var(--border));
+  border-radius: var(--radius);
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.toolSourcesBox {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 14px;
+  margin-bottom: 18px;
+}
+
+.toolSourcesHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.toolSourcesHead h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.toolSourcesHead p {
+  margin: 4px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.toolSourcesHead > span {
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  color: var(--primary-hover);
+  background: var(--primary-soft);
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.toolSourcesBox > input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  color: var(--foreground);
+  background: var(--surface);
+  padding: 7px 12px;
+  outline: none;
+}
+
+.toolAssetList {
+  max-height: 190px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  scrollbar-width: thin;
+}
+
+.toolAssetList label {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--radius-sm);
+  padding: 7px 8px;
+}
+
+.toolAssetList label:hover {
+  background: var(--muted);
+}
+
+.toolAssetList input {
+  accent-color: var(--primary);
+}
+
+.toolAssetList span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.toolAssetList p {
+  margin: 0;
+  color: var(--muted-foreground);
+  padding: 8px;
+  font-size: 13px;
+}
+
+.paramGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.paramGrid label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.paramGrid label > span {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.paramGrid input,
+.paramGrid select,
+.paramGrid textarea {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--foreground);
+  background: var(--surface-2);
+  padding: 8px 11px;
+  outline: none;
+}
+
+.paramGrid input:focus,
+.paramGrid select:focus,
+.paramGrid textarea:focus {
+  border-color: var(--primary);
+}
+
+.paramGrid input[type="checkbox"] {
+  width: 22px;
+  min-height: 22px;
+  accent-color: var(--primary);
+}
+
+.paramGrid textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.paramWide {
+  grid-column: 1 / -1;
+}
+
+.toolPickerActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding: 14px 18px;
+}
+
+.toolPickerActions div {
+  display: flex;
+  gap: 8px;
+}
+
+.primaryButton,
+.secondaryButton {
+  min-height: 40px;
+  border-radius: var(--radius);
+  padding: 8px 15px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.primaryButton {
+  border: none;
+  color: var(--on-primary);
+  background: var(--primary);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.secondaryButton {
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  background: var(--surface-2);
 }
 
 .modalToolbar {
@@ -980,6 +1507,344 @@
   padding: 24px;
 }
 
+.canvasBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(2, 6, 23, 0.62);
+  backdrop-filter: blur(9px);
+}
+
+.canvasPanel {
+  width: min(1120px, 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.canvasHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+  padding: 16px 18px;
+}
+
+.canvasHead > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.canvasHead > div > span {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  color: var(--on-primary);
+  background: var(--primary);
+}
+
+.canvasHead svg {
+  width: 20px;
+  height: 20px;
+}
+
+.canvasHead h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.canvasHead p {
+  margin: 3px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.canvasHead button {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--foreground);
+  background: var(--muted);
+  cursor: pointer;
+}
+
+.canvasBody {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  padding: 28px;
+}
+
+.canvasBody article {
+  width: min(820px, 100%);
+  min-height: 100%;
+  margin: 0 auto;
+  white-space: pre-wrap;
+  color: var(--foreground);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px;
+  line-height: 2.05;
+  font-size: 15px;
+}
+
+.examCanvas {
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 0;
+  overflow: hidden;
+}
+
+.examStart {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+}
+
+.examStart > div {
+  width: min(560px, 100%);
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  padding: 28px;
+}
+
+.examStart svg {
+  width: 54px;
+  height: 54px;
+  color: var(--primary);
+}
+
+.examStart h3 {
+  margin: 14px 0 8px;
+  font-size: 21px;
+}
+
+.examStart p {
+  margin: 0 auto 18px;
+  color: var(--muted-foreground);
+  line-height: 1.9;
+}
+
+.examStart dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0 0 20px;
+}
+
+.examStart dl div {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 10px;
+}
+
+.examStart dt {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+
+.examStart dd {
+  margin: 4px 0 0;
+  font-weight: 900;
+}
+
+.examAside {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-left: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 18px;
+}
+
+.examTimer,
+.examProgress,
+.examResult {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 13px;
+}
+
+.examTimer span,
+.examProgress span,
+.examResult span,
+.examResult small {
+  display: block;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.examTimer strong,
+.examProgress strong,
+.examResult strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--foreground);
+  font-size: 20px;
+}
+
+.examResult small {
+  margin-top: 8px;
+  line-height: 1.8;
+}
+
+.examAside .primaryButton {
+  width: 100%;
+  margin-top: auto;
+}
+
+.examGradeError {
+  border: 1px solid color-mix(in srgb, var(--destructive) 60%, var(--border));
+  border-radius: var(--radius);
+  color: var(--destructive);
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+  padding: 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.examQuestions {
+  min-width: 0;
+  overflow: auto;
+  padding: 22px;
+}
+
+.examQuestion {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 18px;
+}
+
+.examQuestion + .examQuestion {
+  margin-top: 14px;
+}
+
+.examQuestionHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.examQuestionHead h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 2;
+}
+
+.examQuestionHead span {
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  color: var(--primary-hover);
+  background: var(--primary-soft);
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.examCitations {
+  margin: 6px 0 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.examChoices {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.examChoices label {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 9px 11px;
+  cursor: pointer;
+}
+
+.examChoices input {
+  accent-color: var(--primary);
+}
+
+.examChoices span {
+  line-height: 1.8;
+}
+
+.correctChoice {
+  border-color: color-mix(in srgb, var(--primary) 70%, var(--border)) !important;
+  background: var(--primary-soft) !important;
+}
+
+.wrongChoice {
+  border-color: color-mix(in srgb, var(--destructive) 70%, var(--border)) !important;
+  background: color-mix(in srgb, var(--destructive) 10%, var(--surface)) !important;
+}
+
+.examQuestion textarea {
+  width: 100%;
+  min-height: 140px;
+  margin-top: 14px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--foreground);
+  background: var(--surface);
+  padding: 12px;
+  outline: none;
+}
+
+.examFeedback {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  color: var(--foreground);
+}
+
+.examFeedback b {
+  color: var(--primary-hover);
+}
+
+.examFeedback p,
+.examFeedback ul {
+  margin: 8px 0 0;
+  color: var(--muted-foreground);
+  line-height: 1.9;
+}
+
 .gate {
   width: min(460px, 100%);
   text-align: center;
@@ -1059,5 +1924,57 @@
 
   .modalToolbar div {
     flex-wrap: wrap;
+  }
+
+  .toolPickerBody {
+    grid-template-columns: 1fr;
+  }
+
+  .toolPickerList {
+    max-height: 260px;
+    border-left: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .paramGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .toolPickerActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .toolPickerActions div {
+    justify-content: stretch;
+  }
+
+  .toolPickerActions button {
+    flex: 1;
+  }
+
+  .canvasBackdrop {
+    padding: 12px;
+  }
+
+  .canvasBody {
+    padding: 14px;
+  }
+
+  .canvasBody article {
+    padding: 18px;
+  }
+
+  .examCanvas {
+    grid-template-columns: 1fr;
+  }
+
+  .examStart dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .examAside {
+    border-left: none;
+    border-bottom: 1px solid var(--border);
   }
 }
