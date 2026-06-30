@@ -6,6 +6,7 @@ os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 import re
 import json
 import uuid
+import time
 import torch
 from dotenv import load_dotenv
 import sys
@@ -15,6 +16,7 @@ from document_pipeline import chunker
 from backend.app.vector import get_vector_store
 from backend.app.vector.base import VectorChunk
 from backend.app.vector.embeddings import embed_text, embedding_device
+from backend.app.services.usage_tracking import estimate_tokens_from_text, record_compute_usage_event
 from model_gateway import get_chat_provider, list_chat_model_options
 from model_gateway.base import ChatProvider
 
@@ -360,11 +362,55 @@ def rerank(query: str, chunks: List[Dict], top_k: int) -> List[Dict]:
     model = _get_reranker()
     if model is None:
         return chunks[:top_k]
+    start = time.perf_counter()
+    pairs = [(query, c["text"]) for c in chunks]
+    input_tokens = estimate_tokens_from_text(query) * len(chunks) + sum(
+        estimate_tokens_from_text(c["text"]) for c in chunks
+    )
     try:
-        scores = model.predict([(query, c["text"]) for c in chunks])
+        scores = model.predict(pairs)
         ranked = sorted(zip(chunks, scores), key=lambda cs: float(cs[1]), reverse=True)
-        return [c for c, _ in ranked[:top_k]]
+        result = [c for c, _ in ranked[:top_k]]
+        record_compute_usage_event(
+            operation_type="reranking",
+            provider="local_cpu" if RERANKER_DEVICE == "cpu" else "local_gpu",
+            model=RERANKER_MODEL,
+            device=RERANKER_DEVICE,
+            latency_ms=round((time.perf_counter() - start) * 1000),
+            input_count=len(pairs),
+            input_chars=len(query or "") * len(chunks) + sum(len(c.get("text") or "") for c in chunks),
+            chunk_count=len(chunks),
+            pair_count=len(pairs),
+            query_count=1,
+            batch_size=len(pairs),
+            status="success",
+            metadata={
+                "estimated_input_tokens": input_tokens,
+                "top_k": top_k,
+                "returned": len(result),
+            },
+        )
+        return result
     except Exception as e:
+        record_compute_usage_event(
+            operation_type="reranking",
+            provider="local_cpu" if RERANKER_DEVICE == "cpu" else "local_gpu",
+            model=RERANKER_MODEL,
+            device=RERANKER_DEVICE,
+            latency_ms=round((time.perf_counter() - start) * 1000),
+            input_count=len(pairs),
+            input_chars=len(query or "") * len(chunks) + sum(len(c.get("text") or "") for c in chunks),
+            chunk_count=len(chunks),
+            pair_count=len(pairs),
+            query_count=1,
+            batch_size=len(pairs),
+            status="error",
+            error_type=e.__class__.__name__,
+            metadata={
+                "estimated_input_tokens": input_tokens,
+                "top_k": top_k,
+            },
+        )
         print(f"rerank: falling back to dense order ({e})", flush=True)
         return chunks[:top_k]
 
@@ -689,11 +735,12 @@ def answer_request(
     doc_filters = asset_ids or None
     if asset_ids:
         scope = "selected"
-    provider = get_chat_provider(chat_provider_name, chat_model)
     generation_question = generation_question or question
     if not doc_filters and not doc_filter:
+        provider = get_chat_provider(chat_provider_name, chat_model, feature="chat_free")
         return generate_free_response(generation_question, chat_provider=provider)
 
+    provider = get_chat_provider(chat_provider_name, chat_model, feature="chat_grounded")
     sub_qs = understand_query(question, chat_provider=provider)
 
     if len(sub_qs) == 1:
@@ -762,11 +809,11 @@ def answer_request_stream(
     doc_filters = asset_ids or None
     if asset_ids:
         scope = "selected"
-    provider = get_chat_provider(chat_provider_name, chat_model)
     generation_question = generation_question or question
     yield _trace("request", "started")
 
     if not doc_filters and not doc_filter:
+        provider = get_chat_provider(chat_provider_name, chat_model, feature="chat_free")
         yield _trace("generate", "started", provider=provider.name, model=provider.model, mode="free_chat")
         final_event = None
         for event in generate_free_response_stream(generation_question, chat_provider=provider):
@@ -780,6 +827,7 @@ def answer_request_stream(
         yield {"type": "done"}
         return
 
+    provider = get_chat_provider(chat_provider_name, chat_model, feature="chat_grounded")
     yield _trace("understand_query", "started")
     sub_qs = understand_query(question, chat_provider=provider)
     yield _trace("understand_query", "done", question_count=len(sub_qs))

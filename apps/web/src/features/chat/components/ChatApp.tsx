@@ -36,10 +36,13 @@ type ChatAppProps = {
   };
 };
 
+const FALLBACK_MODEL = "ollama|gemma3:12b";
+
 export function ChatApp({ user }: ChatAppProps) {
   const [models, setModels] = useState<ChatModel[]>([]);
   const [tools, setTools] = useState<ChatTool[]>([]);
-  const [selectedModel, setSelectedModel] = useState("ollama|gemma3:12b");
+  const [defaultModel, setDefaultModel] = useState(FALLBACK_MODEL);
+  const [selectedModel, setSelectedModel] = useState(FALLBACK_MODEL);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
@@ -79,7 +82,8 @@ export function ChatApp({ user }: ChatAppProps) {
 
   async function bootstrap() {
     try {
-      await Promise.all([loadModels(), loadTools(), loadConversations(), loadAssets()]);
+      await loadModels();
+      await Promise.all([loadTools(), loadConversations(), loadAssets()]);
     } catch {
       setStatus("خطا در دریافت اطلاعات اولیه.");
     }
@@ -89,7 +93,11 @@ export function ChatApp({ user }: ChatAppProps) {
     const data = await listChatModels();
     setModels(data.models || []);
     const preferred = (data.models || []).find((model) => model.default && model.enabled) || (data.models || []).find((model) => model.enabled);
-    if (preferred) setSelectedModel(`${preferred.provider}|${preferred.model}`);
+    if (preferred) {
+      const nextDefault = `${preferred.provider}|${preferred.model}`;
+      setDefaultModel(nextDefault);
+      setSelectedModel(nextDefault);
+    }
   }
 
   async function loadTools() {
@@ -113,18 +121,37 @@ export function ChatApp({ user }: ChatAppProps) {
     setSelectedAssetIds((current) => new Set([...current].filter((id) => rows.some((asset) => asset.id === id && assetIsSelectable(asset)))));
   }
 
+  function resetTransientChatState() {
+    setQuestion("");
+    setSelectedAssetIds(new Set());
+    setSelectedTool(null);
+    setSourceMenuOpen(false);
+    setSourceModalOpen(false);
+    setToolPickerOpen(false);
+    setActiveOutput(null);
+    setSourceQuery("");
+    setStatus("");
+  }
+
+  function startNewConversation() {
+    setActiveConversationId(null);
+    resetTransientChatState();
+    setSelectedModel(defaultModel);
+  }
+
   async function selectConversation(id: string) {
+    resetTransientChatState();
     setActiveConversationId(id);
     const data = await getConversationMessages(id);
     upsertConversation({ ...data.conversation, messages: data.messages || [] });
     const value = data.conversation.chat_provider && data.conversation.chat_model
       ? `${data.conversation.chat_provider}|${data.conversation.chat_model}`
       : null;
-    if (value) setSelectedModel(value);
+    setSelectedModel(value || defaultModel);
   }
 
-  async function createConversation() {
-    const [provider, ...modelParts] = selectedModel.split("|");
+  async function createConversation(modelValue = selectedModel) {
+    const [provider, ...modelParts] = modelValue.split("|");
     const data = await createConversationApi(provider, modelParts.join("|"));
     const created = { ...data.conversation, messages: [] };
     upsertConversation(created);
@@ -201,7 +228,7 @@ export function ChatApp({ user }: ChatAppProps) {
       if (activeConversationId === conversation.id) {
         const nextConversation = remaining[0];
         if (nextConversation) await selectConversation(nextConversation.id);
-        else setActiveConversationId(null);
+        else startNewConversation();
       }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "خطا در حذف گفتگو");
@@ -228,8 +255,9 @@ export function ChatApp({ user }: ChatAppProps) {
     if ((!text && !selectedTool) || isSending) return;
     setIsSending(true);
     setQuestion("");
-    let conversationId = activeConversationId || await createConversation();
-    const [provider, ...modelParts] = selectedModel.split("|");
+    const modelValue = selectedModel;
+    let conversationId = activeConversationId || await createConversation(modelValue);
+    const [provider, ...modelParts] = modelValue.split("|");
     let assistantId: string | null = null;
     let answer = "";
 
@@ -392,7 +420,7 @@ export function ChatApp({ user }: ChatAppProps) {
         <ConversationRail
           conversations={conversations}
           activeConversationId={activeConversationId}
-          onCreateConversation={() => void createConversation()}
+          onCreateConversation={startNewConversation}
           onSelectConversation={(id) => void selectConversation(id)}
           onRenameConversation={(conversation) => void renameConversation(conversation)}
           onDeleteConversation={(conversation) => void deleteConversation(conversation)}

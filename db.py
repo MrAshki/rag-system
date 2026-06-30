@@ -156,6 +156,82 @@ CREATE INDEX IF NOT EXISTS idx_generated_outputs_user_updated
     ON generated_outputs (user_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_generated_outputs_conversation
     ON generated_outputs (conversation_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS usage_events (
+    id TEXT PRIMARY KEY,
+    request_id TEXT,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+    message_id TEXT REFERENCES conversation_messages(id) ON DELETE SET NULL,
+    tool_run_id TEXT,
+    output_id TEXT REFERENCES generated_outputs(id) ON DELETE SET NULL,
+    feature TEXT NOT NULL,
+    operation_type TEXT NOT NULL DEFAULT 'chat_completion',
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    total_tokens INTEGER NOT NULL DEFAULT 0,
+    estimated_cost_usd NUMERIC(18, 8) NOT NULL DEFAULT 0,
+    latency_ms INTEGER,
+    status TEXT NOT NULL DEFAULT 'success',
+    error_type TEXT,
+    metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_usage_events_created
+    ON usage_events (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_usage_events_user_created
+    ON usage_events (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_usage_events_feature_created
+    ON usage_events (feature, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_usage_events_provider_model_created
+    ON usage_events (provider, model, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_usage_events_request
+    ON usage_events (request_id);
+CREATE INDEX IF NOT EXISTS idx_usage_events_conversation
+    ON usage_events (conversation_id);
+CREATE INDEX IF NOT EXISTS idx_usage_events_metadata_gin
+    ON usage_events USING gin (metadata_json);
+
+CREATE TABLE IF NOT EXISTS compute_usage_events (
+    id TEXT PRIMARY KEY,
+    request_id TEXT,
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+    message_id TEXT REFERENCES conversation_messages(id) ON DELETE SET NULL,
+    output_id TEXT REFERENCES generated_outputs(id) ON DELETE SET NULL,
+    feature TEXT NOT NULL,
+    operation_type TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT,
+    device TEXT,
+    latency_ms INTEGER,
+    input_count INTEGER NOT NULL DEFAULT 0,
+    input_chars INTEGER NOT NULL DEFAULT 0,
+    chunk_count INTEGER NOT NULL DEFAULT 0,
+    pair_count INTEGER NOT NULL DEFAULT 0,
+    query_count INTEGER NOT NULL DEFAULT 0,
+    batch_size INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'success',
+    error_type TEXT,
+    metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_compute_usage_events_created
+    ON compute_usage_events (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_compute_usage_events_user_created
+    ON compute_usage_events (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_compute_usage_events_feature_created
+    ON compute_usage_events (feature, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_compute_usage_events_operation_created
+    ON compute_usage_events (operation_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_compute_usage_events_request
+    ON compute_usage_events (request_id);
+CREATE INDEX IF NOT EXISTS idx_compute_usage_events_conversation
+    ON compute_usage_events (conversation_id);
+CREATE INDEX IF NOT EXISTS idx_compute_usage_events_metadata_gin
+    ON compute_usage_events USING gin (metadata_json);
 """
 
 
@@ -674,6 +750,212 @@ def get_generated_output(user_id: int, output_id: str):
             "SELECT * FROM generated_outputs WHERE id = %s AND user_id = %s",
             (output_id, user_id),
         ).fetchone()
+
+
+def get_message_for_generated_output(output_id: str):
+    with get_db() as conn:
+        return conn.execute(
+            """SELECT *
+                 FROM conversation_messages
+                WHERE generated_output_id = %s
+                ORDER BY created_at DESC
+                LIMIT 1""",
+            (output_id,),
+        ).fetchone()
+
+
+# ---- usage events ----
+
+def create_usage_event(
+    *,
+    request_id: str = None,
+    user_id: int = None,
+    conversation_id: str = None,
+    message_id: str = None,
+    tool_run_id: str = None,
+    output_id: str = None,
+    feature: str,
+    operation_type: str = "chat_completion",
+    provider: str,
+    model: str,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    total_tokens: int = 0,
+    estimated_cost_usd=0,
+    latency_ms: int = None,
+    status: str = "success",
+    error_type: str = None,
+    metadata=None,
+):
+    usage_event_id = uuid.uuid4().hex
+    ts = now()
+    metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
+    with get_db() as conn:
+        return conn.execute(
+            """INSERT INTO usage_events
+                   (id, request_id, user_id, conversation_id, message_id, tool_run_id,
+                    output_id, feature, operation_type, provider, model, input_tokens,
+                    output_tokens, total_tokens, estimated_cost_usd, latency_ms, status,
+                    error_type, metadata_json, created_at)
+               VALUES
+                   (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, CAST(%s AS jsonb), %s)
+               RETURNING *""",
+            (
+                usage_event_id,
+                request_id,
+                user_id,
+                conversation_id,
+                message_id,
+                tool_run_id,
+                output_id,
+                feature,
+                operation_type,
+                provider,
+                model,
+                int(input_tokens or 0),
+                int(output_tokens or 0),
+                int(total_tokens or 0),
+                estimated_cost_usd or 0,
+                latency_ms,
+                status,
+                error_type,
+                metadata_json,
+                ts,
+            ),
+        ).fetchone()
+
+
+def update_usage_events_context(
+    request_id: str,
+    message_id: str = None,
+    output_id: str = None,
+    conversation_id: str = None,
+    user_id: int = None,
+):
+    sets = []
+    params = []
+    if user_id is not None:
+        sets.append("user_id = COALESCE(user_id, %s)")
+        params.append(user_id)
+    if conversation_id is not None:
+        sets.append("conversation_id = COALESCE(conversation_id, %s)")
+        params.append(conversation_id)
+    if message_id is not None:
+        sets.append("message_id = COALESCE(message_id, %s)")
+        params.append(message_id)
+    if output_id is not None:
+        sets.append("output_id = COALESCE(output_id, %s)")
+        params.append(output_id)
+    if not request_id or not sets:
+        return 0
+    params.append(request_id)
+    with get_db() as conn:
+        result = conn.execute(
+            f"""UPDATE usage_events
+                   SET {', '.join(sets)}
+                 WHERE request_id = %s""",
+            tuple(params),
+        )
+        return result.rowcount or 0
+
+
+def create_compute_usage_event(
+    *,
+    request_id: str = None,
+    user_id: int = None,
+    conversation_id: str = None,
+    message_id: str = None,
+    output_id: str = None,
+    feature: str,
+    operation_type: str,
+    provider: str,
+    model: str = None,
+    device: str = None,
+    latency_ms: int = None,
+    input_count: int = 0,
+    input_chars: int = 0,
+    chunk_count: int = 0,
+    pair_count: int = 0,
+    query_count: int = 0,
+    batch_size: int = 0,
+    status: str = "success",
+    error_type: str = None,
+    metadata=None,
+):
+    compute_event_id = uuid.uuid4().hex
+    ts = now()
+    metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
+    with get_db() as conn:
+        return conn.execute(
+            """INSERT INTO compute_usage_events
+                   (id, request_id, user_id, conversation_id, message_id, output_id,
+                    feature, operation_type, provider, model, device, latency_ms,
+                    input_count, input_chars, chunk_count, pair_count, query_count,
+                    batch_size, status, error_type, metadata_json, created_at)
+               VALUES
+                   (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, CAST(%s AS jsonb), %s)
+               RETURNING *""",
+            (
+                compute_event_id,
+                request_id,
+                user_id,
+                conversation_id,
+                message_id,
+                output_id,
+                feature,
+                operation_type,
+                provider,
+                model,
+                device,
+                latency_ms,
+                int(input_count or 0),
+                int(input_chars or 0),
+                int(chunk_count or 0),
+                int(pair_count or 0),
+                int(query_count or 0),
+                int(batch_size or 0),
+                status,
+                error_type,
+                metadata_json,
+                ts,
+            ),
+        ).fetchone()
+
+
+def update_compute_usage_events_context(
+    request_id: str,
+    message_id: str = None,
+    output_id: str = None,
+    conversation_id: str = None,
+    user_id: int = None,
+):
+    sets = []
+    params = []
+    if user_id is not None:
+        sets.append("user_id = COALESCE(user_id, %s)")
+        params.append(user_id)
+    if conversation_id is not None:
+        sets.append("conversation_id = COALESCE(conversation_id, %s)")
+        params.append(conversation_id)
+    if message_id is not None:
+        sets.append("message_id = COALESCE(message_id, %s)")
+        params.append(message_id)
+    if output_id is not None:
+        sets.append("output_id = COALESCE(output_id, %s)")
+        params.append(output_id)
+    if not request_id or not sets:
+        return 0
+    params.append(request_id)
+    with get_db() as conn:
+        result = conn.execute(
+            f"""UPDATE compute_usage_events
+                   SET {', '.join(sets)}
+                 WHERE request_id = %s""",
+            tuple(params),
+        )
+        return result.rowcount or 0
 
 
 def update_asset_status(asset_id: str, status: str, scan_error: str = None,

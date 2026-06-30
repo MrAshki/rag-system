@@ -15,7 +15,7 @@ def _database_url_for_sqlalchemy(raw_url: str) -> str:
     if raw_url.startswith("DATABASE_URL="):
         raw_url = raw_url.removeprefix("DATABASE_URL=").strip()
     if not raw_url:
-        return "postgresql+psycopg://postgres:123@127.0.0.1:5433/rag_system"
+        return "postgresql+psycopg://postgres:123@127.0.0.1:5432/rag_system"
     if raw_url.startswith("postgresql+psycopg://"):
         return raw_url
     if raw_url.startswith("postgresql://"):

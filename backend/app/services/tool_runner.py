@@ -4,6 +4,7 @@ from typing import Iterable
 
 import rag
 from backend.app.services.tools import prepare_tool_search_query
+from backend.app.services.usage_tracking import current_usage_context, usage_context
 from model_gateway.registry import get_chat_provider
 
 
@@ -195,13 +196,26 @@ def _retrieve(tool: dict, params: dict, question: str, document_id: str = None,
               asset_ids: list[str] = None, user_id: int = None) -> list[dict]:
     query = prepare_tool_search_query(question, tool, params)
     top_k = 12 if tool["id"] in {"exam_generation", "flashcards"} else None
-    return rag.retrieve(
-        query,
-        document_id=document_id,
-        document_ids=asset_ids or None,
-        user_id=user_id,
-        top_k=top_k,
-    )
+    context = current_usage_context()
+    metadata = {
+        "tool_id": tool["id"],
+        "retrieval_for": tool["id"],
+    }
+    with usage_context(
+        user_id=context.get("user_id") or user_id,
+        conversation_id=context.get("conversation_id"),
+        message_id=context.get("message_id"),
+        request_id=context.get("request_id"),
+        feature=context.get("feature") or tool["id"],
+        metadata=metadata,
+    ):
+        return rag.retrieve(
+            query,
+            document_id=document_id,
+            document_ids=asset_ids or None,
+            user_id=user_id,
+            top_k=top_k,
+        )
 
 
 def _json_loads(content: str) -> dict:
@@ -407,7 +421,7 @@ def _run_exam_tool(provider, tool: dict, params: dict, question: str, chunks: li
 def run_tool(tool: dict, params: dict, question: str, document_id: str = None,
              asset_ids: list[str] = None, user_id: int = None, selected_source: str = None,
              chat_provider_name: str = None, chat_model: str = None) -> dict:
-    provider = get_chat_provider(chat_provider_name, chat_model)
+    provider = get_chat_provider(chat_provider_name, chat_model, feature=tool["id"])
     chunks = _retrieve(tool, params, question, document_id=document_id, asset_ids=asset_ids, user_id=user_id)
     if (asset_ids or document_id) and not chunks:
         return {"answer": "در منابع انتخاب‌شده اطلاعات کافی برای اجرای این ابزار پیدا نشد.", "sources": []}
@@ -423,7 +437,7 @@ def run_tool(tool: dict, params: dict, question: str, document_id: str = None,
 def run_tool_stream(tool: dict, params: dict, question: str, document_id: str = None,
                     asset_ids: list[str] = None, user_id: int = None, selected_source: str = None,
                     chat_provider_name: str = None, chat_model: str = None) -> Iterable[dict]:
-    provider = get_chat_provider(chat_provider_name, chat_model)
+    provider = get_chat_provider(chat_provider_name, chat_model, feature=tool["id"])
     yield {"type": "trace", "stage": "tool", "status": "started", "tool_id": tool["id"]}
     chunks = _retrieve(tool, params, question, document_id=document_id, asset_ids=asset_ids, user_id=user_id)
     yield {"type": "trace", "stage": "retrieve", "status": "done", "chunks": len(chunks)}

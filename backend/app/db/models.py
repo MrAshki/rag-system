@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     Text,
     UniqueConstraint,
     func,
@@ -171,6 +172,78 @@ class GeneratedOutput(Base):
     __table_args__ = (
         Index("idx_generated_outputs_user_updated", "user_id", "updated_at"),
         Index("idx_generated_outputs_conversation", "conversation_id", "updated_at"),
+    )
+
+
+class UsageEvent(Base):
+    __tablename__ = "usage_events"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    request_id: Mapped[str | None] = mapped_column(Text)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    conversation_id: Mapped[str | None] = mapped_column(ForeignKey("conversations.id", ondelete="SET NULL"))
+    message_id: Mapped[str | None] = mapped_column(ForeignKey("conversation_messages.id", ondelete="SET NULL"))
+    tool_run_id: Mapped[str | None] = mapped_column(Text)
+    output_id: Mapped[str | None] = mapped_column(ForeignKey("generated_outputs.id", ondelete="SET NULL"))
+    feature: Mapped[str] = mapped_column(Text, nullable=False)
+    operation_type: Mapped[str] = mapped_column(Text, nullable=False, default="chat_completion")
+    provider: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(Text, nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    estimated_cost_usd = mapped_column(Numeric(18, 8), nullable=False, default=0)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="success")
+    error_type: Mapped[str | None] = mapped_column(Text)
+    metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    __table_args__ = (
+        Index("idx_usage_events_created", "created_at"),
+        Index("idx_usage_events_user_created", "user_id", "created_at"),
+        Index("idx_usage_events_feature_created", "feature", "created_at"),
+        Index("idx_usage_events_provider_model_created", "provider", "model", "created_at"),
+        Index("idx_usage_events_request", "request_id"),
+        Index("idx_usage_events_conversation", "conversation_id"),
+        Index("idx_usage_events_metadata_gin", "metadata_json", postgresql_using="gin"),
+    )
+
+
+class ComputeUsageEvent(Base):
+    __tablename__ = "compute_usage_events"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    request_id: Mapped[str | None] = mapped_column(Text)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    conversation_id: Mapped[str | None] = mapped_column(ForeignKey("conversations.id", ondelete="SET NULL"))
+    message_id: Mapped[str | None] = mapped_column(ForeignKey("conversation_messages.id", ondelete="SET NULL"))
+    output_id: Mapped[str | None] = mapped_column(ForeignKey("generated_outputs.id", ondelete="SET NULL"))
+    feature: Mapped[str] = mapped_column(Text, nullable=False)
+    operation_type: Mapped[str] = mapped_column(Text, nullable=False)
+    provider: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str | None] = mapped_column(Text)
+    device: Mapped[str | None] = mapped_column(Text)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    input_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    input_chars: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    chunk_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pair_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    query_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    batch_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="success")
+    error_type: Mapped[str | None] = mapped_column(Text)
+    metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    __table_args__ = (
+        Index("idx_compute_usage_events_created", "created_at"),
+        Index("idx_compute_usage_events_user_created", "user_id", "created_at"),
+        Index("idx_compute_usage_events_feature_created", "feature", "created_at"),
+        Index("idx_compute_usage_events_operation_created", "operation_type", "created_at"),
+        Index("idx_compute_usage_events_request", "request_id"),
+        Index("idx_compute_usage_events_conversation", "conversation_id"),
+        Index("idx_compute_usage_events_metadata_gin", "metadata_json", postgresql_using="gin"),
     )
 
 

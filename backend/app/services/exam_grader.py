@@ -240,7 +240,7 @@ def grade_exam(exam: dict, answers: dict, provider_name: str = None, model: str 
 
     if descriptive_items:
         try:
-            provider = get_chat_provider(provider_name, model)
+            provider = get_chat_provider(provider_name, model, feature="exam_grading_descriptive")
         except Exception:
             logger.exception("Failed to initialize chat provider for exam grading")
             provider = None

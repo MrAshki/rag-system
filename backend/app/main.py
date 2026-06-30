@@ -8,7 +8,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 import db
 import scan_worker
-from backend.app.api.routes import admin, ask, auth, conversations, gallery, health, outputs, payments, profile, tools
+from backend.app.api.routes import admin, ask, auth, conversations, gallery, health, litellm, outputs, payments, profile, tools
 from backend.app.core.config import settings
 
 
@@ -53,6 +53,7 @@ app.include_router(payments.router)
 app.include_router(gallery.router)
 app.include_router(conversations.router)
 app.include_router(tools.router)
+app.include_router(litellm.router)
 app.include_router(outputs.router)
 app.include_router(ask.router)
 app.include_router(admin.router)

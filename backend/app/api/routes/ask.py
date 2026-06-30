@@ -1,4 +1,5 @@
 import json
+import uuid
 
 from fastapi import APIRouter, Body, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -21,6 +22,7 @@ from backend.app.services.tools import (
     prepare_tool_search_query,
     validate_tool_params,
 )
+from backend.app.services.usage_tracking import usage_context
 
 router = APIRouter()
 
@@ -113,6 +115,14 @@ def _rate_limit_ask(request: Request, data: dict):
     )
 
 
+def _usage_feature(payload: dict) -> str:
+    if payload.get("tool_id"):
+        return payload["tool_id"]
+    if payload.get("mode") == "grounded_chat":
+        return "chat_grounded"
+    return "chat_free"
+
+
 def _ensure_conversation(user_id: int, payload: dict):
     chat_provider = payload["chat_provider"]
     chat_model = payload["chat_model"]
@@ -154,7 +164,7 @@ def ask(request: Request, data: dict = Body(default_factory=dict), user=Depends(
         return error
     chat_provider, chat_model = model_pair
 
-    db.create_conversation_message(
+    user_message = db.create_conversation_message(
         conversation_id,
         "user",
         payload["question"],
@@ -166,31 +176,46 @@ def ask(request: Request, data: dict = Body(default_factory=dict), user=Depends(
     if conversation["title"] == "گفتگوی جدید":
         conversation = db.update_conversation(user["id"], conversation_id, title=payload["question"][:42])
 
+    request_id = uuid.uuid4().hex
     try:
-        if payload["tool"]:
-            result = run_tool(
-                payload["tool"],
-                payload["tool_params"],
-                payload["question"],
-                document_id=payload["document_id"],
-                asset_ids=payload["asset_ids"],
-                user_id=user["id"],
-                selected_source=payload["document_name"],
-                chat_provider_name=chat_provider,
-                chat_model=chat_model,
-            )
-        else:
-            result = rag.answer_request(
-                payload["search_question"],
-                scope=payload["scope"],
-                document_id=payload["document_id"],
-                asset_ids=payload["asset_ids"],
-                user_id=user["id"],
-                selected_source=payload["document_name"],
-                chat_provider_name=chat_provider,
-                chat_model=chat_model,
-                generation_question=payload["runtime_question"],
-            )
+        with usage_context(
+            request_id=request_id,
+            user_id=user["id"],
+            conversation_id=conversation_id,
+            message_id=user_message["id"],
+            feature=_usage_feature(payload),
+            operation_type="chat_completion",
+            metadata={
+                "mode": payload["mode"],
+                "tool_id": payload["tool_id"],
+                "chat_provider": chat_provider,
+                "chat_model": chat_model,
+            },
+        ):
+            if payload["tool"]:
+                result = run_tool(
+                    payload["tool"],
+                    payload["tool_params"],
+                    payload["question"],
+                    document_id=payload["document_id"],
+                    asset_ids=payload["asset_ids"],
+                    user_id=user["id"],
+                    selected_source=payload["document_name"],
+                    chat_provider_name=chat_provider,
+                    chat_model=chat_model,
+                )
+            else:
+                result = rag.answer_request(
+                    payload["search_question"],
+                    scope=payload["scope"],
+                    document_id=payload["document_id"],
+                    asset_ids=payload["asset_ids"],
+                    user_id=user["id"],
+                    selected_source=payload["document_name"],
+                    chat_provider_name=chat_provider,
+                    chat_model=chat_model,
+                    generation_question=payload["runtime_question"],
+                )
         generated_output = _create_tool_output(
             user["id"],
             conversation_id,
@@ -198,7 +223,7 @@ def ask(request: Request, data: dict = Body(default_factory=dict), user=Depends(
             result.get("answer", ""),
             content_json=result.get("content_json"),
         )
-        db.create_conversation_message(
+        assistant_message = db.create_conversation_message(
             conversation_id,
             "assistant",
             result.get("answer", ""),
@@ -209,6 +234,18 @@ def ask(request: Request, data: dict = Body(default_factory=dict), user=Depends(
             tool_title=payload["tool_title"],
             tool_params=payload["tool_params"],
             generated_output_id=generated_output["id"] if generated_output else None,
+        )
+        db.update_usage_events_context(
+            request_id,
+            message_id=assistant_message["id"],
+            output_id=generated_output["id"] if generated_output else None,
+        )
+        db.update_compute_usage_events_context(
+            request_id,
+            user_id=user["id"],
+            conversation_id=conversation_id,
+            message_id=assistant_message["id"],
+            output_id=generated_output["id"] if generated_output else None,
         )
     except Exception:
         db.create_conversation_message(
@@ -263,77 +300,105 @@ def ask_stream(request: Request, data: dict = Body(default_factory=dict), user=D
         tool_title=payload["tool_title"],
         tool_params=payload["tool_params"],
     )
+    request_id = uuid.uuid4().hex
 
     def event_stream():
         answer_text = ""
         final_sources = []
         done_sent = False
         try:
-            yield json.dumps({
-                "type": "conversation",
-                "conversation": conversation_to_json(conversation),
-                "user_message": message_to_json(user_message),
-                "assistant_message": message_to_json(assistant_message),
-            }, ensure_ascii=False) + "\n"
-            events = (
-                run_tool_stream(
-                    payload["tool"],
-                    payload["tool_params"],
-                    payload["question"],
-                    document_id=payload["document_id"],
-                    asset_ids=payload["asset_ids"],
-                    user_id=user_id,
-                    selected_source=payload["document_name"],
-                    chat_provider_name=chat_provider,
-                    chat_model=chat_model,
+            with usage_context(
+                request_id=request_id,
+                user_id=user_id,
+                conversation_id=conversation_id,
+                message_id=assistant_message["id"],
+                feature=_usage_feature(payload),
+                operation_type="chat_completion",
+                metadata={
+                    "mode": payload["mode"],
+                    "tool_id": payload["tool_id"],
+                    "chat_provider": chat_provider,
+                    "chat_model": chat_model,
+                    "stream": True,
+                },
+            ):
+                yield json.dumps({
+                    "type": "conversation",
+                    "conversation": conversation_to_json(conversation),
+                    "user_message": message_to_json(user_message),
+                    "assistant_message": message_to_json(assistant_message),
+                }, ensure_ascii=False) + "\n"
+                events = (
+                    run_tool_stream(
+                        payload["tool"],
+                        payload["tool_params"],
+                        payload["question"],
+                        document_id=payload["document_id"],
+                        asset_ids=payload["asset_ids"],
+                        user_id=user_id,
+                        selected_source=payload["document_name"],
+                        chat_provider_name=chat_provider,
+                        chat_model=chat_model,
+                    )
+                    if payload["tool"]
+                    else rag.answer_request_stream(
+                        payload["search_question"],
+                        scope=payload["scope"],
+                        document_id=payload["document_id"],
+                        asset_ids=payload["asset_ids"],
+                        user_id=user_id,
+                        selected_source=payload["document_name"],
+                        chat_provider_name=chat_provider,
+                        chat_model=chat_model,
+                        generation_question=payload["runtime_question"],
+                    )
                 )
-                if payload["tool"]
-                else rag.answer_request_stream(
-                    payload["search_question"],
-                    scope=payload["scope"],
-                    document_id=payload["document_id"],
-                    asset_ids=payload["asset_ids"],
-                    user_id=user_id,
-                    selected_source=payload["document_name"],
-                    chat_provider_name=chat_provider,
-                    chat_model=chat_model,
-                    generation_question=payload["runtime_question"],
-                )
-            )
-            for event in events:
-                if event.get("type") == "token":
-                    answer_text += event.get("delta") or ""
-                elif event.get("type") == "final":
-                    if not answer_text and event.get("answer"):
-                        answer_text = event["answer"]
-                    final_sources = event.get("sources") or []
-                    generated_output = _create_tool_output(
-                        user_id,
-                        conversation_id,
-                        payload,
-                        answer_text,
-                        content_json=event.get("content_json"),
-                    )
-                    if generated_output:
-                        event["generated_output"] = generated_output
-                    db.update_conversation_message(
-                        conversation_id,
-                        assistant_message["id"],
-                        content=answer_text,
-                        sources=final_sources,
-                        status="complete",
-                        generated_output_id=generated_output["id"] if generated_output else None,
-                    )
-                elif event.get("type") == "error":
-                    db.update_conversation_message(
-                        conversation_id,
-                        assistant_message["id"],
-                        content=event.get("error") or "خطا در تولید پاسخ.",
-                        status="error",
-                    )
-                elif event.get("type") == "done":
-                    done_sent = True
-                yield json.dumps(event, ensure_ascii=False) + "\n"
+                for event in events:
+                    if event.get("type") == "token":
+                        answer_text += event.get("delta") or ""
+                    elif event.get("type") == "final":
+                        if not answer_text and event.get("answer"):
+                            answer_text = event["answer"]
+                        final_sources = event.get("sources") or []
+                        generated_output = _create_tool_output(
+                            user_id,
+                            conversation_id,
+                            payload,
+                            answer_text,
+                            content_json=event.get("content_json"),
+                        )
+                        if generated_output:
+                            event["generated_output"] = generated_output
+                        db.update_conversation_message(
+                            conversation_id,
+                            assistant_message["id"],
+                            content=answer_text,
+                            sources=final_sources,
+                            status="complete",
+                            generated_output_id=generated_output["id"] if generated_output else None,
+                        )
+                        db.update_usage_events_context(
+                            request_id,
+                            message_id=assistant_message["id"],
+                            output_id=generated_output["id"] if generated_output else None,
+                        )
+                        db.update_compute_usage_events_context(
+                            request_id,
+                            user_id=user_id,
+                            conversation_id=conversation_id,
+                            message_id=assistant_message["id"],
+                            output_id=generated_output["id"] if generated_output else None,
+                        )
+                    elif event.get("type") == "error":
+                        db.update_conversation_message(
+                            conversation_id,
+                            assistant_message["id"],
+                            content=event.get("error") or "خطا در تولید پاسخ.",
+                            status="error",
+                        )
+                    elif event.get("type") == "done":
+                        done_sent = True
+                    yield json.dumps(event, ensure_ascii=False) + "\n"
         except Exception as e:
             print(f"ask_stream: unhandled error ({e})", flush=True)
             db.update_conversation_message(
