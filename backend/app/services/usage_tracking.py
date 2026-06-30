@@ -6,8 +6,8 @@ from typing import Any
 _usage_context = ContextVar("usage_context", default={})
 
 
-@contextmanager
-def usage_context(**fields):
+def _merge_context(fields: dict[str, Any]) -> dict[str, Any]:
+    fields = dict(fields)
     current = dict(_usage_context.get() or {})
     metadata = dict(current.get("metadata") or {})
     metadata.update(fields.pop("metadata", {}) or {})
@@ -17,11 +17,24 @@ def usage_context(**fields):
     }
     if metadata:
         next_context["metadata"] = metadata
-    token = _usage_context.set(next_context)
+    return next_context
+
+
+def set_usage_context(**fields):
+    return _usage_context.set(_merge_context(fields))
+
+
+def reset_usage_context(token):
+    _usage_context.reset(token)
+
+
+@contextmanager
+def usage_context(**fields):
+    token = set_usage_context(**fields)
     try:
         yield
     finally:
-        _usage_context.reset(token)
+        reset_usage_context(token)
 
 
 def current_usage_context() -> dict[str, Any]:

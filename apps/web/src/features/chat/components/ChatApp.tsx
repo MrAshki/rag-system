@@ -1,8 +1,6 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { AppIcon } from "@/components/AppIcon";
 import { logout } from "@/features/auth/api";
 import type { Asset, ChatMessage, ChatModel, ChatTool, Conversation, GeneratedOutput, SelectedTool, StreamEvent } from "@/types/api";
 import {
@@ -19,12 +17,11 @@ import {
   uploadAsset,
 } from "@/features/chat/api";
 import { ChatComposer } from "@/features/chat/components/ChatComposer";
-import { ConversationRail } from "@/features/chat/components/ConversationRail";
 import { MessageList } from "@/features/chat/components/MessageList";
 import { OutputCanvas } from "@/features/chat/components/OutputCanvas";
 import { SourceModal } from "@/features/chat/components/SourceModal";
-import { ToolsSidebar } from "@/features/chat/components/ToolsSidebar";
 import { ToolPickerModal } from "@/features/chat/components/ToolPickerModal";
+import { UnifiedChatSidebar } from "@/features/chat/components/UnifiedChatSidebar";
 import { assetIsSelectable } from "@/features/chat/utils/assets";
 import { traceLabel } from "@/features/chat/utils/stream";
 import styles from "@/app/page.module.css";
@@ -36,7 +33,17 @@ type ChatAppProps = {
   };
 };
 
-const FALLBACK_MODEL = "ollama|gemma3:12b";
+const FALLBACK_MODEL = "litellm|chat_free";
+
+function defaultToolParams(tool: ChatTool) {
+  const values: SelectedTool["params"] = {};
+  for (const field of tool.params_schema) {
+    if (field.default !== undefined) values[field.id] = field.default;
+    else if (field.type === "boolean") values[field.id] = false;
+    else values[field.id] = "";
+  }
+  return values;
+}
 
 export function ChatApp({ user }: ChatAppProps) {
   const [models, setModels] = useState<ChatModel[]>([]);
@@ -199,14 +206,6 @@ export function ChatApp({ user }: ChatAppProps) {
     }
   }
 
-  function toggleTheme() {
-    const root = document.documentElement;
-    const current = root.getAttribute("data-theme") === "light" ? "light" : "dark";
-    const next = current === "dark" ? "light" : "dark";
-    root.setAttribute("data-theme", next);
-    localStorage.setItem("theme", next);
-  }
-
   async function renameConversation(conversation: Conversation) {
     const nextTitle = window.prompt("نام جدید گفتگو", conversation.title)?.trim();
     if (!nextTitle || nextTitle === conversation.title) return;
@@ -356,6 +355,18 @@ export function ChatApp({ user }: ChatAppProps) {
     });
   }
 
+  function selectQuickTool(toolId: string) {
+    const tool = tools.find((item) => item.id === toolId);
+    if (!tool) return;
+    setSelectedTool({ tool, params: defaultToolParams(tool), assetIds: [...selectedAssetIds] });
+    setSourceMenuOpen(false);
+  }
+
+  function clearActiveSources() {
+    setSelectedAssetIds(new Set());
+    setSelectedTool((current) => current ? { ...current, assetIds: [] } : current);
+  }
+
   useEffect(() => {
     void bootstrap();
     // The initial bootstrap intentionally runs once on mount.
@@ -363,67 +374,79 @@ export function ChatApp({ user }: ChatAppProps) {
   }, []);
 
   const messages = activeConversation?.messages || [];
+  const hasMessages = messages.length > 0;
 
   return (
     <main className={styles.shell}>
-      <header className={styles.topbar}>
-        <div className={styles.brand}><AppIcon name="file" /> دستیار اسناد</div>
-        <div className={styles.accountArea}>
-          <Link className={styles.user} href="/profile">
-            <AppIcon name="user" />
-            <span>{user.label}</span>
-          </Link>
-          <button className={styles.themeButton} onClick={toggleTheme} type="button" title="تغییر تم">
-            <AppIcon name="theme" />
-          </button>
-          <button className={styles.logoutButton} disabled={isLoggingOut} onClick={() => void logoutUser()} type="button">
-            {isLoggingOut ? "در حال خروج..." : "خروج"}
-          </button>
-        </div>
-      </header>
+      <div className={`${styles.layout} ${activeOutput ? styles.layoutWithOutput : ""}`}>
+        {activeOutput && <OutputCanvas output={activeOutput} selectedModel={selectedModel} onClose={() => setActiveOutput(null)} />}
 
-      <div className={styles.layout}>
-        <ToolsSidebar />
-
-        <section className={styles.workspace}>
-          <div className={styles.workspaceHead}>
-            <span className={styles.headIcon}><AppIcon name="chat" /></span>
-            <div>
-              <h1>چت هوشمند</h1>
-              <p>بدون منبع برای چت آزاد، یا با انتخاب اسناد برای پاسخ مستند.</p>
-              <span className={styles.mode}>{activeAssets.length ? `حالت مستند: ${activeAssets.length.toLocaleString("fa-IR")} منبع` : "حالت چت آزاد"}</span>
+        <section className={`${styles.workspace} ${hasMessages ? styles.workspaceActive : styles.workspaceEmpty}`}>
+          {hasMessages ? (
+            <>
+              <MessageList messages={messages} onOpenOutput={(message) => void openOutput(message)} />
+              <ChatComposer
+                question={question}
+                selectedModel={selectedModel}
+                models={models}
+                tools={tools}
+                selectedSourceCount={activeAssets.length}
+                selectedTool={selectedTool}
+                sourceMenuOpen={sourceMenuOpen}
+                isSending={isSending}
+                textareaRef={textareaRef}
+                onQuestionChange={setQuestion}
+                onSubmit={(event) => void submitQuestion(event)}
+                onToggleSourceMenu={() => setSourceMenuOpen((value) => !value)}
+                onOpenSourceModal={() => { setSourceMenuOpen(false); setSourceModalOpen(true); void loadAssets(); }}
+                onOpenToolPicker={() => { setSourceMenuOpen(false); setToolPickerOpen(true); }}
+                onQuickToolSelect={selectQuickTool}
+                onClearTool={() => setSelectedTool(null)}
+                onClearSources={clearActiveSources}
+                onModelChange={(value) => void updateConversationModel(value)}
+              />
+            </>
+          ) : (
+            <div className={styles.emptyChatStage}>
+              <div className={styles.emptyHero}>
+                <h1>از کجا شروع کنیم؟</h1>
+                <p>سؤال بپرسید، منبع انتخاب کنید یا یک ابزار را از داخل همین چت اجرا کنید.</p>
+              </div>
+              <ChatComposer
+                question={question}
+                selectedModel={selectedModel}
+                models={models}
+                tools={tools}
+                selectedSourceCount={activeAssets.length}
+                selectedTool={selectedTool}
+                sourceMenuOpen={sourceMenuOpen}
+                isSending={isSending}
+                textareaRef={textareaRef}
+                onQuestionChange={setQuestion}
+                onSubmit={(event) => void submitQuestion(event)}
+                onToggleSourceMenu={() => setSourceMenuOpen((value) => !value)}
+                onOpenSourceModal={() => { setSourceMenuOpen(false); setSourceModalOpen(true); void loadAssets(); }}
+                onOpenToolPicker={() => { setSourceMenuOpen(false); setToolPickerOpen(true); }}
+                onQuickToolSelect={selectQuickTool}
+                onClearTool={() => setSelectedTool(null)}
+                onClearSources={clearActiveSources}
+                onModelChange={(value) => void updateConversationModel(value)}
+              />
             </div>
-          </div>
-
-          <MessageList messages={messages} onOpenOutput={(message) => void openOutput(message)} />
-
-          <ChatComposer
-            question={question}
-            selectedModel={selectedModel}
-            models={models}
-            selectedSourceCount={activeAssets.length}
-            selectedTool={selectedTool}
-            sourceMenuOpen={sourceMenuOpen}
-            isSending={isSending}
-            textareaRef={textareaRef}
-            onQuestionChange={setQuestion}
-            onSubmit={(event) => void submitQuestion(event)}
-            onToggleSourceMenu={() => setSourceMenuOpen((value) => !value)}
-            onOpenSourceModal={() => { setSourceMenuOpen(false); setSourceModalOpen(true); void loadAssets(); }}
-            onOpenToolPicker={() => { setSourceMenuOpen(false); setToolPickerOpen(true); }}
-            onClearTool={() => setSelectedTool(null)}
-            onModelChange={(value) => void updateConversationModel(value)}
-          />
+          )}
           {status && <div className={styles.status}>{status}</div>}
         </section>
 
-        <ConversationRail
+        <UnifiedChatSidebar
+          userLabel={user.label}
           conversations={conversations}
           activeConversationId={activeConversationId}
+          isLoggingOut={isLoggingOut}
           onCreateConversation={startNewConversation}
           onSelectConversation={(id) => void selectConversation(id)}
           onRenameConversation={(conversation) => void renameConversation(conversation)}
           onDeleteConversation={(conversation) => void deleteConversation(conversation)}
+          onLogout={() => void logoutUser()}
         />
       </div>
 
@@ -464,7 +487,6 @@ export function ChatApp({ user }: ChatAppProps) {
           event.currentTarget.value = "";
         }}
       />
-      {activeOutput && <OutputCanvas output={activeOutput} selectedModel={selectedModel} onClose={() => setActiveOutput(null)} />}
     </main>
   );
 }

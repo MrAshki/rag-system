@@ -1,43 +1,61 @@
-@import url("https://cdn.jsdelivr.net/fontsource/css/estedad@5.2.1/400.css");
-@import url("https://cdn.jsdelivr.net/fontsource/css/estedad@5.2.1/500.css");
-@import url("https://cdn.jsdelivr.net/fontsource/css/estedad@5.2.1/600.css");
-@import url("https://cdn.jsdelivr.net/fontsource/css/estedad@5.2.1/700.css");
-
 :root {
-  --bg: #081320;
-  --surface: #102033;
-  --surface-2: #14263b;
-  --muted: #1b3048;
-  --border: #223a55;
-  --foreground: #f4f7fb;
-  --muted-foreground: #8da0b8;
-  --primary: #16bfb2;
-  --primary-hover: #27d4c6;
-  --primary-soft: rgba(22, 191, 178, 0.14);
-  --on-primary: #04131c;
-  --topbar-bg: rgba(16, 32, 51, 0.78);
-  --panel-bg: rgba(16, 32, 51, 0.88);
-  --composer-bg: #102033;
-  --destructive: #ff6b6b;
-  --warning: #f7b955;
+  color-scheme: dark;
+  --bg: #080a0d;
+  --bg-deep: #050608;
+  --surface: #111418;
+  --surface-2: #171b21;
+  --surface-3: #1f242c;
+  --surface-raised: rgba(24, 28, 35, 0.92);
+  --muted: #242a33;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.13);
+  --foreground: #f3f6f8;
+  --muted-foreground: #9aa4b2;
+  --subtle-foreground: #6f7a88;
+  --primary: #2dd4bf;
+  --primary-hover: #5eead4;
+  --primary-soft: rgba(45, 212, 191, 0.12);
+  --primary-border: rgba(45, 212, 191, 0.28);
+  --on-primary: #031311;
+  --destructive: #fb7185;
+  --destructive-soft: rgba(251, 113, 133, 0.13);
+  --warning: #fbbf24;
+  --radius-xs: 6px;
   --radius-sm: 8px;
-  --radius: 12px;
-  --radius-lg: 18px;
+  --radius: 10px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
   --radius-full: 999px;
-  --shadow-sm: 0 8px 24px rgba(0, 0, 0, 0.18);
-  --shadow-md: 0 16px 42px rgba(0, 0, 0, 0.26);
-  --shadow-lg: 0 24px 72px rgba(0, 0, 0, 0.36);
+  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 14px 34px rgba(0, 0, 0, 0.18);
+  --shadow-md: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 22px 58px rgba(0, 0, 0, 0.28);
+  --shadow-lg: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 30px 90px rgba(0, 0, 0, 0.42);
   --text-xs: 12px;
   --text-sm: 13px;
-  --text-base: 15px;
-  --text-lg: 18px;
-  --text-xl: 22px;
-  --text-2xl: 28px;
+  --text-base: 14px;
+  --text-message: 15px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
   --transition: 160ms ease;
 }
 
 * {
   box-sizing: border-box;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 html,
@@ -47,37 +65,16 @@ body {
   margin: 0;
 }
 
-[data-theme="light"] {
-  --bg: #eef2f6;
-  --surface: #ffffff;
-  --surface-2: #f5f8fb;
-  --muted: #eef2f6;
-  --border: #dbe3ec;
-  --foreground: #0f2336;
-  --muted-foreground: #5b6b7d;
-  --primary: #0d9488;
-  --primary-hover: #0f766e;
-  --primary-soft: #e6f7f4;
-  --on-primary: #ffffff;
-  --topbar-bg: rgba(255, 255, 255, 0.82);
-  --panel-bg: #ffffff;
-  --composer-bg: #ffffff;
-  --destructive: #dc2626;
-  --warning: #d97706;
-  --shadow-sm: 0 1px 2px rgba(15, 35, 54, 0.05), 0 1px 3px rgba(15, 35, 54, 0.07);
-  --shadow-md: 0 6px 18px rgba(15, 35, 54, 0.09);
-  --shadow-lg: 0 16px 40px rgba(15, 35, 54, 0.16);
-}
-
 body {
   color: var(--foreground);
   background:
-    radial-gradient(980px 460px at 100% -8%, rgba(22, 191, 178, 0.14), transparent 55%),
-    radial-gradient(820px 420px at 0% 0%, rgba(74, 144, 226, 0.12), transparent 52%),
-    var(--bg);
-  font-family: "Estedad", "Vazirmatn", Tahoma, Arial, sans-serif;
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 180px),
+    radial-gradient(960px 520px at 72% 18%, rgba(45, 212, 191, 0.09), transparent 58%),
+    radial-gradient(760px 520px at 10% 8%, rgba(98, 128, 255, 0.07), transparent 54%),
+    linear-gradient(135deg, var(--bg), var(--bg-deep));
+  font-family: var(--font-ui), Tahoma, Arial, sans-serif;
   font-size: var(--text-base);
-  line-height: 1.7;
+  line-height: 1.75;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -99,8 +96,7 @@ a {
   text-decoration: none;
 }
 
-@media (max-width: 860px) {
-  body {
-    overflow: auto;
-  }
+::selection {
+  color: var(--on-primary);
+  background: var(--primary);
 }

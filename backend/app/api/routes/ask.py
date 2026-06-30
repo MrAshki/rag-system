@@ -22,7 +22,7 @@ from backend.app.services.tools import (
     prepare_tool_search_query,
     validate_tool_params,
 )
-from backend.app.services.usage_tracking import usage_context
+from backend.app.services.usage_tracking import reset_usage_context, set_usage_context, usage_context
 
 router = APIRouter()
 
@@ -306,99 +306,111 @@ def ask_stream(request: Request, data: dict = Body(default_factory=dict), user=D
         answer_text = ""
         final_sources = []
         done_sent = False
+        usage_fields = {
+            "request_id": request_id,
+            "user_id": user_id,
+            "conversation_id": conversation_id,
+            "message_id": assistant_message["id"],
+            "feature": _usage_feature(payload),
+            "operation_type": "chat_completion",
+            "metadata": {
+                "mode": payload["mode"],
+                "tool_id": payload["tool_id"],
+                "chat_provider": chat_provider,
+                "chat_model": chat_model,
+                "stream": True,
+            },
+        }
         try:
-            with usage_context(
-                request_id=request_id,
-                user_id=user_id,
-                conversation_id=conversation_id,
-                message_id=assistant_message["id"],
-                feature=_usage_feature(payload),
-                operation_type="chat_completion",
-                metadata={
-                    "mode": payload["mode"],
-                    "tool_id": payload["tool_id"],
-                    "chat_provider": chat_provider,
-                    "chat_model": chat_model,
-                    "stream": True,
-                },
-            ):
-                yield json.dumps({
-                    "type": "conversation",
-                    "conversation": conversation_to_json(conversation),
-                    "user_message": message_to_json(user_message),
-                    "assistant_message": message_to_json(assistant_message),
-                }, ensure_ascii=False) + "\n"
-                events = (
-                    run_tool_stream(
-                        payload["tool"],
-                        payload["tool_params"],
-                        payload["question"],
-                        document_id=payload["document_id"],
-                        asset_ids=payload["asset_ids"],
-                        user_id=user_id,
-                        selected_source=payload["document_name"],
-                        chat_provider_name=chat_provider,
-                        chat_model=chat_model,
-                    )
-                    if payload["tool"]
-                    else rag.answer_request_stream(
-                        payload["search_question"],
-                        scope=payload["scope"],
-                        document_id=payload["document_id"],
-                        asset_ids=payload["asset_ids"],
-                        user_id=user_id,
-                        selected_source=payload["document_name"],
-                        chat_provider_name=chat_provider,
-                        chat_model=chat_model,
-                        generation_question=payload["runtime_question"],
-                    )
+            yield json.dumps({
+                "type": "conversation",
+                "conversation": conversation_to_json(conversation),
+                "user_message": message_to_json(user_message),
+                "assistant_message": message_to_json(assistant_message),
+            }, ensure_ascii=False) + "\n"
+            events = (
+                run_tool_stream(
+                    payload["tool"],
+                    payload["tool_params"],
+                    payload["question"],
+                    document_id=payload["document_id"],
+                    asset_ids=payload["asset_ids"],
+                    user_id=user_id,
+                    selected_source=payload["document_name"],
+                    chat_provider_name=chat_provider,
+                    chat_model=chat_model,
                 )
-                for event in events:
-                    if event.get("type") == "token":
-                        answer_text += event.get("delta") or ""
-                    elif event.get("type") == "final":
-                        if not answer_text and event.get("answer"):
-                            answer_text = event["answer"]
-                        final_sources = event.get("sources") or []
-                        generated_output = _create_tool_output(
-                            user_id,
-                            conversation_id,
-                            payload,
-                            answer_text,
-                            content_json=event.get("content_json"),
-                        )
-                        if generated_output:
-                            event["generated_output"] = generated_output
-                        db.update_conversation_message(
-                            conversation_id,
-                            assistant_message["id"],
-                            content=answer_text,
-                            sources=final_sources,
-                            status="complete",
-                            generated_output_id=generated_output["id"] if generated_output else None,
-                        )
-                        db.update_usage_events_context(
-                            request_id,
-                            message_id=assistant_message["id"],
-                            output_id=generated_output["id"] if generated_output else None,
-                        )
-                        db.update_compute_usage_events_context(
-                            request_id,
-                            user_id=user_id,
-                            conversation_id=conversation_id,
-                            message_id=assistant_message["id"],
-                            output_id=generated_output["id"] if generated_output else None,
-                        )
-                    elif event.get("type") == "error":
-                        db.update_conversation_message(
-                            conversation_id,
-                            assistant_message["id"],
-                            content=event.get("error") or "خطا در تولید پاسخ.",
-                            status="error",
-                        )
-                    elif event.get("type") == "done":
-                        done_sent = True
-                    yield json.dumps(event, ensure_ascii=False) + "\n"
+                if payload["tool"]
+                else rag.answer_request_stream(
+                    payload["search_question"],
+                    scope=payload["scope"],
+                    document_id=payload["document_id"],
+                    asset_ids=payload["asset_ids"],
+                    user_id=user_id,
+                    selected_source=payload["document_name"],
+                    chat_provider_name=chat_provider,
+                    chat_model=chat_model,
+                    generation_question=payload["runtime_question"],
+                )
+            )
+            iterator = iter(events)
+            while True:
+                token = set_usage_context(**usage_fields)
+                try:
+                    event = next(iterator)
+                except StopIteration:
+                    reset_usage_context(token)
+                    break
+                except Exception:
+                    reset_usage_context(token)
+                    raise
+                reset_usage_context(token)
+
+                if event.get("type") == "token":
+                    answer_text += event.get("delta") or ""
+                elif event.get("type") == "final":
+                    if not answer_text and event.get("answer"):
+                        answer_text = event["answer"]
+                    final_sources = event.get("sources") or []
+                    generated_output = _create_tool_output(
+                        user_id,
+                        conversation_id,
+                        payload,
+                        answer_text,
+                        content_json=event.get("content_json"),
+                    )
+                    if generated_output:
+                        event["generated_output"] = generated_output
+                    db.update_conversation_message(
+                        conversation_id,
+                        assistant_message["id"],
+                        content=answer_text,
+                        sources=final_sources,
+                        status="complete",
+                        generated_output_id=generated_output["id"] if generated_output else None,
+                    )
+                    db.update_usage_events_context(
+                        request_id,
+                        message_id=assistant_message["id"],
+                        output_id=generated_output["id"] if generated_output else None,
+                    )
+                    db.update_compute_usage_events_context(
+                        request_id,
+                        user_id=user_id,
+                        conversation_id=conversation_id,
+                        message_id=assistant_message["id"],
+                        output_id=generated_output["id"] if generated_output else None,
+                    )
+                elif event.get("type") == "error":
+                    db.update_conversation_message(
+                        conversation_id,
+                        assistant_message["id"],
+                        content=event.get("error") or "خطا در تولید پاسخ.",
+                        status="error",
+                    )
+                elif event.get("type") == "done":
+                    done_sent = True
+                yield json.dumps(event, ensure_ascii=False) + "\n"
         except Exception as e:
             print(f"ask_stream: unhandled error ({e})", flush=True)
             db.update_conversation_message(

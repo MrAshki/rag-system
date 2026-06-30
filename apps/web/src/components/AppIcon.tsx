@@ -10,10 +10,13 @@ import {
   FileOutput,
   FilePenLine,
   FileText,
+  Maximize2,
+  Minimize2,
   GraduationCap,
   Headphones,
   LayoutTemplate,
   List,
+  LogOut,
   Mic,
   MoreHorizontal,
   Plus,
@@ -69,7 +72,10 @@ type AppIconName =
   | "tts"
   | "provider"
   | "studio"
-  | "tools";
+  | "tools"
+  | "logout"
+  | "maximize"
+  | "minimize";
 
 export function AppIcon({ name }: { name: AppIconName }) {
   const props = { "aria-hidden": true, focusable: false } as const;
@@ -109,5 +115,8 @@ export function AppIcon({ name }: { name: AppIconName }) {
   if (name === "provider") return <Blocks {...props} />;
   if (name === "studio") return <WandSparkles {...props} />;
   if (name === "tools") return <Sparkles {...props} />;
+  if (name === "logout") return <LogOut {...props} />;
+  if (name === "maximize") return <Maximize2 {...props} />;
+  if (name === "minimize") return <Minimize2 {...props} />;
   return <Sparkles {...props} />;
 }
