@@ -36,27 +36,35 @@ type ExamContent = {
 
 export function OutputCanvas({ output, selectedModel, onClose }: OutputCanvasProps) {
   const exam = getExam(output);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   return (
-    <div className={styles.canvasBackdrop} role="dialog" aria-modal="true" aria-labelledby="canvas-title">
-      <section className={styles.canvasPanel}>
-        <header className={styles.canvasHead}>
+    <section className={`${styles.canvasPanel} ${isFullscreen ? styles.canvasFullscreen : ""}`} aria-labelledby="canvas-title">
+      <header className={styles.canvasHead}>
+        <div>
+          <span><AppIcon name="output" /></span>
           <div>
-            <span><AppIcon name="output" /></span>
-            <div>
-              <h2 id="canvas-title">{exam?.title || output.title}</h2>
-              <p>{exam ? "محیط آزمون" : outputTypeLabel(output.type)}</p>
-            </div>
+            <h2 id="canvas-title">{exam?.title || output.title}</h2>
+            <p>{exam ? "محیط آزمون" : outputTypeLabel(output.type)}</p>
           </div>
+        </div>
+        <div className={styles.canvasActions}>
+          <button
+            onClick={() => setIsFullscreen((value) => !value)}
+            type="button"
+            title={isFullscreen ? "خروج از تمام‌صفحه" : "تمام‌صفحه"}
+          >
+            <AppIcon name={isFullscreen ? "minimize" : "maximize"} />
+          </button>
           <button onClick={onClose} type="button" title="بستن"><AppIcon name="x" /></button>
-        </header>
-        {exam ? <ExamCanvas exam={exam} outputId={output.id} selectedModel={selectedModel} /> : (
-          <div className={styles.canvasBody}>
-            <article>{output.content_markdown}</article>
-          </div>
-        )}
-      </section>
-    </div>
+        </div>
+      </header>
+      {exam ? <ExamCanvas exam={exam} outputId={output.id} selectedModel={selectedModel} /> : (
+        <div className={styles.canvasBody}>
+          <article>{output.content_markdown}</article>
+        </div>
+      )}
+    </section>
   );
 }
 

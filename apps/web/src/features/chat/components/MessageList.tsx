@@ -34,13 +34,6 @@ export function MessageList({
 }) {
   return (
     <div className={styles.messages}>
-      {!messages.length && (
-        <div className={styles.empty}>
-          <AppIcon name="chat" />
-          <h2>سؤال خود را بپرسید</h2>
-          <p>برای پاسخ مستند، از دکمه + منابع آماده را انتخاب کنید.</p>
-        </div>
-      )}
       {messages.map((message) => (
         <div className={`${styles.message} ${message.role === "user" ? styles.userMessage : styles.assistantMessage}`} key={message.id}>
           {message.role === "assistant" && message.status === "streaming" && !message.content && (

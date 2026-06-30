@@ -12,7 +12,7 @@ _chat_providers = {}
 
 
 def _default_provider() -> str:
-    return (os.getenv("DEFAULT_CHAT_PROVIDER") or os.getenv("CHAT_PROVIDER", "ollama")).strip().lower()
+    return (os.getenv("DEFAULT_CHAT_PROVIDER") or os.getenv("CHAT_PROVIDER") or "litellm").strip().lower()
 
 
 def _env_key(value: str) -> str:
@@ -107,7 +107,7 @@ def list_chat_model_options():
     deepseek_model = os.getenv("DEEPSEEK_MODEL") or "deepseek-v4-flash"
     litellm_models = [
         item.strip()
-        for item in (os.getenv("LITELLM_MODEL_OPTIONS") or _litellm_model_for_feature()).split(",")
+        for item in (os.getenv("LITELLM_CHAT_MODEL_OPTIONS") or _litellm_model_for_feature("chat_free")).split(",")
         if item.strip()
     ]
     litellm_models = list(dict.fromkeys(litellm_models))
@@ -140,7 +140,7 @@ def list_chat_model_options():
         options.append({
             "provider": "litellm",
             "model": litellm_model,
-            "label": f"LiteLLM - {litellm_model}",
+            "label": "LiteLLM - Chat" if litellm_model == "chat_free" else f"LiteLLM - {litellm_model}",
             "enabled": os.getenv("LITELLM_ENABLED", "true").strip().lower() == "true",
             "default": default_provider == "litellm" and index == 0,
         })

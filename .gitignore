@@ -39,3 +39,6 @@ manual_test_inputs/*
 # Book source materials (copyrighted, not for distribution)
 books/
 converted/
+
+# Local font source folder; app-bundled fonts live under apps/web/src/app/fonts/.
+fonts/
