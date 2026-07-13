@@ -25,62 +25,33 @@ The product is designed around a Persian-first user experience while keeping the
 The diagram below replaces the previous model-only image and shows the complete product path, from the browser to document ingestion, retrieval, generation, and persistence.
 
 ```mermaid
-flowchart LR
-    User([User]) --> Web[Next.js Web App]
-    Admin([Administrator]) --> Web
+flowchart TB
+    User["User or Administrator"] --> Web["Next.js Web Application"]
+    Web --> API["FastAPI Application"]
 
-    Web -->|Session and REST / NDJSON| API[FastAPI Application]
+    API --> Accounts["Authentication, Profiles, and Admin"]
+    API --> Chat["Chat and Document Tools"]
+    API --> Gallery["Document Gallery"]
+    API --> Payments["Plans and Zarinpal Payments"]
 
-    subgraph Product[Application Services]
-        API --> Auth[Authentication and Profiles]
-        API --> Chat[Chat and Tool Runner]
-        API --> Gallery[Document Gallery]
-        API --> Billing[Plans and Payments]
-        API --> Console[Admin Console]
-    end
+    Gallery --> Storage["Per-user File Storage"]
+    Gallery --> Worker["Background Scan Worker"]
+    Worker --> Normalize["Normalize TXT, PDF, and DOCX"]
+    Normalize --> OCR["Optional OCR"]
+    OCR --> Chunk["Structure-aware Chunking"]
+    Chunk --> Embed["BGE-M3 Embeddings"]
+    Embed --> VectorDB["PostgreSQL with pgvector"]
 
-    subgraph Ingestion[Document Ingestion]
-        Gallery --> Storage[(Per-user File Storage)]
-        Gallery --> Worker[Background Scan Worker]
-        Worker --> Normalize[TXT / PDF / DOCX Normalization]
-        Normalize --> OCR[Optional OCR]
-        OCR --> Chunk[Structure-aware Chunking]
-        Chunk --> Embed[BGE-M3 Embeddings]
-    end
+    Chat --> Search["User-isolated Vector Search"]
+    Search --> VectorDB
+    Search --> Rerank["BGE Reranker"]
+    Rerank --> Context["Grounded Context and Citations"]
+    Context --> Gateway["Model Gateway"]
+    Gateway --> Models["Ollama, LiteLLM, Gemini, or DeepSeek"]
 
-    subgraph Retrieval[Grounded Answer Pipeline]
-        Chat --> Search[Vector Search]
-        Search --> Rerank[BGE Reranker]
-        Rerank --> Context[Grounded Context and Citations]
-        Context --> Gateway[Model Gateway]
-    end
-
-    Embed --> Vector[(PostgreSQL + pgvector)]
-    Search --> Vector
-    Auth --> Database[(PostgreSQL)]
+    Accounts --> Database["PostgreSQL Application Data"]
     Chat --> Database
-    Billing --> Database
-    Console --> Database
-
-    Gateway --> Ollama[Ollama]
-    Gateway --> LiteLLM[LiteLLM]
-    Gateway --> Gemini[Gemini]
-    Gateway --> DeepSeek[DeepSeek]
-
-    LiteLLM --> Gemini
-    Billing --> Zarinpal[Zarinpal Gateway]
-
-    classDef entry fill:#ecfeff,stroke:#0f766e,color:#134e4a,stroke-width:1.5px;
-    classDef app fill:#eff6ff,stroke:#2563eb,color:#1e3a8a,stroke-width:1.5px;
-    classDef process fill:#f8fafc,stroke:#64748b,color:#0f172a;
-    classDef data fill:#fff7ed,stroke:#ea580c,color:#7c2d12,stroke-width:1.5px;
-    classDef model fill:#f5f3ff,stroke:#7c3aed,color:#4c1d95;
-
-    class User,Admin entry;
-    class Web,API,Auth,Chat,Gallery,Billing,Console app;
-    class Worker,Normalize,OCR,Chunk,Embed,Search,Rerank,Context process;
-    class Storage,Vector,Database data;
-    class Gateway,Ollama,LiteLLM,Gemini,DeepSeek model;
+    Payments --> Database
 ```
 
 ### Request Flow
