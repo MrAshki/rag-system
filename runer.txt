@@ -1,0 +1,11 @@
+cd D:\rag-system
+docker compose up -d
+
+docker compose -f infra\litellm\docker-compose.yml --env-file .env up -d
+
+cd D:\rag-system
+.\venv\Scripts\activate
+python serve.py
+
+cd D:\rag-system\apps\web
+npm run dev
