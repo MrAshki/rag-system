@@ -21,14 +21,17 @@ from typing import Dict, List, Optional, Tuple
 from pypdf import PdfReader
 from docx import Document as DocxDocument
 
+from document_pipeline import cleaning
 from document_pipeline import llm_normalize
 from document_pipeline import ocr
 import storage
 
-NORMALIZATION_VERSION = "v2"
+NORMALIZATION_VERSION = "v3"
+ENABLE_TEXT_CLEANUP = os.getenv("ENABLE_TEXT_CLEANUP", "true").lower() == "true"
 
 # Step 2.5: optional LLM-assisted relabeling, off by default.
 ENABLE_LLM_NORMALIZATION = os.getenv("ENABLE_LLM_NORMALIZATION", "false").lower() == "true"
+LLM_NORMALIZATION_PROVIDER = os.getenv("LLM_NORMALIZATION_PROVIDER", "ollama").strip().lower()
 LLM_NORMALIZATION_MODEL = os.getenv("LLM_NORMALIZATION_MODEL", "gemma3:12b")
 LLM_NORMALIZATION_NUM_CTX = int(os.getenv("LLM_NORMALIZATION_NUM_CTX", "4096"))
 LLM_NORMALIZATION_MAX_BATCHES = int(os.getenv("LLM_NORMALIZATION_MAX_BATCHES", "20"))
@@ -36,8 +39,16 @@ LLM_NORMALIZATION_MAX_BATCHES = int(os.getenv("LLM_NORMALIZATION_MAX_BATCHES", "
 PERSIAN_DIGITS_TRANS = str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789")
 
 # Explicit, low-false-positive structural signals.
+PERSIAN_ORDINAL_RE = (
+    r"اول|دوم|سوم|چهارم|پنجم|ششم|هفتم|هشتم|نهم|دهم|"
+    r"یازدهم|دوازدهم|سیزدهم|چهاردهم|پانزدهم|شانزدهم|"
+    r"هفدهم|هجدهم|نوزدهم|بیستم"
+)
 CHAPTER_WORD_RE = re.compile(
-    r"^(chapter|part|فصل|بخش)\s+([0-9۰-۹]+|[a-zA-Z]+)\b[:\.\-–—]?\s*(.*)$", re.IGNORECASE
+    r"^(chapter|part|فصل|بخش)\s+"
+    r"([0-9۰-۹]+|[a-zA-Z]+|" + PERSIAN_ORDINAL_RE + r")"
+    r"(?:\s*[:\.\-–—]\s*|\s+|$)(.*)$",
+    re.IGNORECASE,
 )
 NUMBERED_MARKER_RE = re.compile(r"^([0-9۰-۹]+)[\.\)]\s+(\S.*)$")
 BULLET_MARKER_RE = re.compile(r"^([-*•])\s+(.*)$")
@@ -74,6 +85,8 @@ GARBLE_MIN_TOKENS = 10             # need enough words on the page to judge it
 GARBLE_STOPWORD_RATE_MIN = 0.03    # below this share of stopwords => garbled
 GARBLE_DIACRITIC_RATE_MAX = 0.10   # above this share of diacritics => garbled
 GARBLE_MIN_LETTERS_FOR_DIAC = 30   # don't judge diacritic rate on tiny samples
+GARBLE_MIN_ARABIC_SHARE = 0.35      # never apply Persian heuristics to English pages
+OCR_MAX_SKIPPED_PAGE_RATIO = 0.05  # tolerate sparse covers/image-only end pages
 
 # Ultra-common Persian function words: present in essentially any real Persian
 # text, absent from broken-font mojibake.
@@ -122,6 +135,10 @@ def _looks_garbled(text: str) -> bool:
     if not text:
         return False
     letters = sum(1 for c in text if _is_arabic_letter(c))
+    latin_letters = sum(1 for c in text if c.isascii() and c.isalpha())
+    script_letters = letters + latin_letters
+    if letters < GARBLE_MIN_LETTERS_FOR_DIAC or letters / max(script_letters, 1) < GARBLE_MIN_ARABIC_SHARE:
+        return False
     if letters >= GARBLE_MIN_LETTERS_FOR_DIAC:
         diac = sum(1 for c in text if c in _FA_DIACRITICS)
         if diac / letters > GARBLE_DIACRITIC_RATE_MAX:
@@ -162,6 +179,11 @@ def _generic_heading_candidate(line: str) -> bool:
     them than over-detect ordinary short Persian sentences as headings."""
     line = line.strip()
     if not line or len(line) > MAX_HEADING_LEN or TRAILING_PUNCT_RE.search(line):
+        return False
+    # Extracted table rows often look title-cased because they begin with a rank
+    # and country/entity name ("62 Serbia 0.833 76.8 ..."). Promoting each row to
+    # a heading makes the row values disappear from retrievable body chunks.
+    if len(re.findall(r"(?<!\w)[0-9۰-۹][0-9۰-۹,\.–—-]*", line)) >= 3:
         return False
     if not _has_latin_letters(line):
         return False
@@ -280,6 +302,7 @@ def _promote_title(blocks: List[Tuple]) -> List[Tuple]:
 def _llm_meta_defaults() -> Dict:
     return {
         "llm_normalization_used": False,
+        "llm_provider": None,
         "llm_model": None,
         "llm_validation_status": "not_attempted",
         "llm_validation_warnings": [],
@@ -304,6 +327,7 @@ def _maybe_llm_relabel(blocks: List[Tuple], structure_confidence: str, force: bo
 
     new_blocks, info = llm_normalize.classify_document(
         blocks,
+        provider=LLM_NORMALIZATION_PROVIDER,
         model=LLM_NORMALIZATION_MODEL,
         num_ctx=LLM_NORMALIZATION_NUM_CTX,
         max_batches=LLM_NORMALIZATION_MAX_BATCHES,
@@ -318,6 +342,7 @@ def _maybe_llm_relabel(blocks: List[Tuple], structure_confidence: str, force: bo
         return blocks, meta
 
     meta["llm_normalization_used"] = True
+    meta["llm_provider"] = LLM_NORMALIZATION_PROVIDER
     meta["llm_model"] = LLM_NORMALIZATION_MODEL
     meta["llm_validation_status"] = info["status"]
     meta["llm_batches_fallback_count"] = info["batches_fallback"]
@@ -463,6 +488,31 @@ def _blocks_to_markdown(blocks: List[Tuple]) -> str:
         else:
             md_parts.append(b[1])
     return "\n\n".join(md_parts)
+
+
+def _heading_count_from_markdown(markdown_text: str) -> int:
+    return sum(
+        1
+        for line in (markdown_text or "").splitlines()
+        if re.match(r"^\s*#{1,3}\s+\S", line)
+    )
+
+
+def _finalize_normalized_result(filename: str, result: Dict) -> Dict:
+    meta = dict(result["meta"])
+    markdown_text = result["markdown_text"]
+    if ENABLE_TEXT_CLEANUP:
+        markdown_text, cleanup_meta = cleaning.clean_markdown(markdown_text, filename=filename)
+        meta.update(cleanup_meta)
+        meta["char_count"] = len(markdown_text)
+        meta["heading_count"] = _heading_count_from_markdown(markdown_text)
+    else:
+        meta.update({
+            "text_cleanup_enabled": False,
+            "text_cleanup_version": None,
+            "text_cleanup_removed_lines": 0,
+        })
+    return {"markdown_text": markdown_text, "meta": meta}
 
 
 # ---------------------------------------------------------------------------
@@ -620,6 +670,21 @@ def normalize_pdf(file_stream, ocr_artifact_dir: Optional[str] = None,
                 except Exception as e:  # noqa: BLE001 -- surface as failure, don't index garbage
                     ocr_status, ocr_error = "failed", str(e)
 
+    # Never pass a page already classified as unusable into chunking. If OCR is
+    # unavailable, sparse cover/image pages may be skipped while the healthy text
+    # remains indexable; documents with substantial missing coverage are rejected
+    # by the quality gate below.
+    unresolved_ocr_pages = [
+        i for i in ocr_pages_idx
+        if not page_texts[i].strip() or _looks_garbled(page_texts[i])
+    ]
+    if ocr_status != "applied":
+        unresolved_ocr_pages = list(ocr_pages_idx)
+    for i in unresolved_ocr_pages:
+        page_texts[i] = ""
+    skipped_page_ratio = len(unresolved_ocr_pages) / max(page_count, 1)
+    ocr_blocking = skipped_page_ratio > OCR_MAX_SKIPPED_PAGE_RATIO
+
     # Phase 3: build blocks + Markdown from the (possibly OCR-corrected) page text.
     page_blocks_list: List[List[Tuple]] = []
     all_blocks: List[Tuple] = []
@@ -658,10 +723,11 @@ def normalize_pdf(file_stream, ocr_artifact_dir: Optional[str] = None,
     avg_chars_per_page = (total_chars / page_count) if page_count else 0
 
     ocr_required = bool(ocr_pages_idx)
-    if ocr_required and ocr_status != "applied":
-        # Pages needed OCR but it didn't run -> the text we have is bad. Flag it so
-        # the caller fails the asset instead of indexing mojibake.
+    if ocr_required and ocr_blocking:
+        # Too much of the document is missing to claim trustworthy coverage.
         warning = "ocr_required"
+    elif unresolved_ocr_pages:
+        warning = "partial_ocr_unavailable"
     elif avg_chars_per_page < OCR_REQUIRED_CHARS_PER_PAGE:
         warning = "ocr_required"
     elif avg_chars_per_page < LOW_TEXT_DENSITY_CHARS_PER_PAGE:
@@ -682,6 +748,9 @@ def normalize_pdf(file_stream, ocr_artifact_dir: Optional[str] = None,
         "ocr_status": ocr_status,
         "ocr_pages_detected": len(ocr_pages_idx),
         "ocr_pages_applied": ocr_applied_count,
+        "ocr_pages_skipped": len(unresolved_ocr_pages),
+        "ocr_skipped_page_ratio": round(skipped_page_ratio, 4),
+        "ocr_blocking": ocr_blocking,
     }
     if ocr_error:
         meta["ocr_error"] = ocr_error
@@ -707,12 +776,24 @@ def normalize_document(filename: str, file_stream, ext: str,
         text = file_stream.read()
         if isinstance(text, bytes):
             text = text.decode("utf-8")
-        return normalize_txt(text, force_llm_normalization=force_llm_normalization)
+        return _finalize_normalized_result(
+            filename,
+            normalize_txt(text, force_llm_normalization=force_llm_normalization),
+        )
     if ext == ".docx":
-        return normalize_docx(file_stream, force_llm_normalization=force_llm_normalization)
+        return _finalize_normalized_result(
+            filename,
+            normalize_docx(file_stream, force_llm_normalization=force_llm_normalization),
+        )
     if ext == ".pdf":
-        return normalize_pdf(file_stream, ocr_artifact_dir=ocr_artifact_dir,
-                             force_llm_normalization=force_llm_normalization)
+        return _finalize_normalized_result(
+            filename,
+            normalize_pdf(
+                file_stream,
+                ocr_artifact_dir=ocr_artifact_dir,
+                force_llm_normalization=force_llm_normalization,
+            ),
+        )
     raise ValueError(f"Unsupported file type: {ext}")
 
 

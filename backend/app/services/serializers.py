@@ -9,6 +9,7 @@ def _row_get(row, key, default=None):
 
 
 def asset_to_json(a) -> dict:
+    profile = _row_get(a, "document_profile_json") or None
     return {
         "id": a["id"],
         "filename": a["original_filename"],
@@ -19,6 +20,9 @@ def asset_to_json(a) -> dict:
         "chunk_count": a["chunk_count"],
         "scan_error": a["scan_error"],
         "warning": a["extraction_warning"],
+        "quality_status": _row_get(a, "quality_status"),
+        "quality_score": _row_get(a, "quality_score"),
+        "document_profile": profile,
         "created_at": a["created_at"],
     }
 
