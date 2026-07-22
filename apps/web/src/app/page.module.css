@@ -607,6 +607,29 @@
   cursor: help;
 }
 
+.messageSources {
+  display: grid;
+  gap: 5px;
+  width: fit-content;
+  max-width: min(100%, 760px);
+  margin-top: 10px;
+  border-inline-start: 2px solid var(--primary-border);
+  color: var(--muted-foreground);
+  padding-inline-start: 10px;
+  white-space: normal;
+}
+
+.messageSources span {
+  color: var(--foreground);
+  font-size: var(--text-xs);
+  font-weight: 900;
+}
+
+.messageSources small {
+  line-height: 1.7;
+  font-size: var(--text-xs);
+}
+
 .openOutputButton {
   width: fit-content;
   min-height: 34px;

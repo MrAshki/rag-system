@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppIcon } from "@/components/AppIcon";
 import { listAssets, uploadAsset } from "@/features/chat/api";
 import { assetName, categoryLabel, statusLabel } from "@/features/chat/utils/assets";
@@ -10,8 +10,12 @@ import styles from "@/app/gallery/gallery.module.css";
 
 function statusClass(asset: Asset) {
   if (asset.status === "scanned") return styles.ready;
-  if (asset.status === "error") return styles.error;
+  if (asset.status === "failed") return styles.error;
   return "";
+}
+
+function assetIsPending(asset: Asset) {
+  return asset.status === "uploaded" || asset.status === "scanning";
 }
 
 export function GalleryClient() {
@@ -23,6 +27,8 @@ export function GalleryClient() {
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  const hasPendingAssets = assets.some(assetIsPending);
+
   const filteredAssets = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return assets.filter((asset) => {
@@ -32,17 +38,17 @@ export function GalleryClient() {
     });
   }, [assets, category, query]);
 
-  async function load() {
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const data = await listAssets();
       setAssets(data.assets || []);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "خطا در دریافت فایل‌ها.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  }
+  }, []);
 
   async function upload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -67,7 +73,15 @@ export function GalleryClient() {
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
+
+  useEffect(() => {
+    if (!hasPendingAssets) return;
+    const intervalId = window.setInterval(() => {
+      void load(true);
+    }, 2500);
+    return () => window.clearInterval(intervalId);
+  }, [hasPendingAssets, load]);
 
   return (
     <main className={styles.page}>
@@ -119,6 +133,9 @@ export function GalleryClient() {
                     <span className={`${styles.badge} ${statusClass(asset)}`}>{statusLabel(asset.status)}</span>
                     {typeof asset.chunk_count === "number" && <span className={styles.badge}>{asset.chunk_count.toLocaleString("fa-IR")} بخش</span>}
                   </div>
+                  {asset.status === "failed" && asset.scan_error && (
+                    <p className={styles.assetError}>{asset.scan_error}</p>
+                  )}
                 </article>
               ))}
             </div>

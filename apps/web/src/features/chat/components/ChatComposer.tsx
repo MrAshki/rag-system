@@ -1,12 +1,10 @@
-import { FormEvent, RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, RefObject, useEffect } from "react";
 import { AppIcon } from "@/components/AppIcon";
-import type { ChatModel, ChatTool, SelectedTool } from "@/types/api";
+import type { ChatTool, SelectedTool } from "@/types/api";
 import styles from "@/app/page.module.css";
 
 type ChatComposerProps = {
   question: string;
-  selectedModel: string;
-  models: ChatModel[];
   tools: ChatTool[];
   selectedSourceCount: number;
   selectedTool: SelectedTool | null;
@@ -21,7 +19,6 @@ type ChatComposerProps = {
   onQuickToolSelect: (toolId: string) => void;
   onClearTool: () => void;
   onClearSources: () => void;
-  onModelChange: (value: string) => void;
 };
 
 const quickTools = [
@@ -33,8 +30,6 @@ const quickTools = [
 
 export function ChatComposer({
   question,
-  selectedModel,
-  models,
   tools,
   selectedSourceCount,
   selectedTool,
@@ -49,7 +44,6 @@ export function ChatComposer({
   onQuickToolSelect,
   onClearTool,
   onClearSources,
-  onModelChange,
 }: ChatComposerProps) {
   const canSend = Boolean(question.trim() || selectedTool) && !isSending;
   const availableQuickTools = quickTools.filter((quickTool) => tools.some((tool) => tool.id === quickTool.id));
@@ -125,8 +119,9 @@ export function ChatComposer({
           </div>
 
           <div className={styles.composerActions}>
-            <ModelPicker models={models} selectedModel={selectedModel} onModelChange={onModelChange} />
-            <button className={styles.iconButton} type="button" disabled title="تبدیل گفتار به متن - به‌زودی"><AppIcon name="mic" /></button>
+            <button className={styles.iconButton} type="button" disabled title="تبدیل گفتار به متن - به‌زودی">
+              <AppIcon name="mic" />
+            </button>
             <button className={styles.send} type="submit" disabled={!canSend} title="ارسال">
               <AppIcon name="send" />
             </button>
@@ -135,88 +130,4 @@ export function ChatComposer({
       </form>
     </div>
   );
-}
-
-function ModelPicker({
-  models,
-  selectedModel,
-  onModelChange,
-}: {
-  models: ChatModel[];
-  selectedModel: string;
-  onModelChange: (value: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const pickerRef = useRef<HTMLDivElement | null>(null);
-  const chatModels = useMemo(
-    () => models.filter((model) => model.provider !== "litellm" || model.model === "chat_free"),
-    [models],
-  );
-  const selected = useMemo(
-    () => chatModels.find((model) => modelValue(model) === selectedModel) || null,
-    [chatModels, selectedModel],
-  );
-
-  useEffect(() => {
-    if (!open) return;
-    function closeOnOutside(event: MouseEvent) {
-      if (!pickerRef.current?.contains(event.target as Node)) setOpen(false);
-    }
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", closeOnOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("mousedown", closeOnOutside);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
-
-  return (
-    <div className={styles.modelPicker} ref={pickerRef}>
-      <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} title="انتخاب مدل">
-        <span>{selected ? modelAlias(selected) : "مدل"}</span>
-        <AppIcon name="chevron" />
-      </button>
-      {open && (
-        <div className={styles.modelPopover} role="listbox">
-          {chatModels.map((model) => {
-            const value = modelValue(model);
-            const active = value === selectedModel;
-            return (
-              <button
-                className={`${styles.modelOption} ${active ? styles.activeModelOption : ""}`}
-                disabled={!model.enabled}
-                key={value}
-                onClick={() => {
-                  if (!model.enabled) return;
-                  onModelChange(value);
-                  setOpen(false);
-                }}
-                role="option"
-                aria-selected={active}
-                type="button"
-              >
-                <span>
-                  <strong>{modelAlias(model)}</strong>
-                  <small>{model.provider}</small>
-                </span>
-                {active && <AppIcon name="check" />}
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function modelValue(model: ChatModel) {
-  return `${model.provider}|${model.model}`;
-}
-
-function modelAlias(model: ChatModel) {
-  const label = model.model || model.label;
-  return label.replace(/^.+?\s+-\s+/, "");
 }

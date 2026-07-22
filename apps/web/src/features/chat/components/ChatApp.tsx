@@ -2,18 +2,16 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { logout } from "@/features/auth/api";
-import type { Asset, ChatMessage, ChatModel, ChatTool, Conversation, GeneratedOutput, SelectedTool, StreamEvent } from "@/types/api";
+import type { Asset, ChatMessage, ChatTool, Conversation, GeneratedOutput, SelectedTool, StreamEvent } from "@/types/api";
 import {
   createConversationApi,
   deleteConversationApi,
   getConversationMessages,
   getGeneratedOutput,
   listAssets,
-  listChatModels,
   listConversations,
   listTools,
   renameConversationApi,
-  updateConversationModelApi,
   uploadAsset,
 } from "@/features/chat/api";
 import { ChatComposer } from "@/features/chat/components/ChatComposer";
@@ -33,7 +31,7 @@ type ChatAppProps = {
   };
 };
 
-const FALLBACK_MODEL = "litellm|chat_free";
+const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 
 function defaultToolParams(tool: ChatTool) {
   const values: SelectedTool["params"] = {};
@@ -46,10 +44,7 @@ function defaultToolParams(tool: ChatTool) {
 }
 
 export function ChatApp({ user }: ChatAppProps) {
-  const [models, setModels] = useState<ChatModel[]>([]);
   const [tools, setTools] = useState<ChatTool[]>([]);
-  const [defaultModel, setDefaultModel] = useState(FALLBACK_MODEL);
-  const [selectedModel, setSelectedModel] = useState(FALLBACK_MODEL);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
@@ -89,21 +84,9 @@ export function ChatApp({ user }: ChatAppProps) {
 
   async function bootstrap() {
     try {
-      await loadModels();
       await Promise.all([loadTools(), loadConversations(), loadAssets()]);
     } catch {
       setStatus("خطا در دریافت اطلاعات اولیه.");
-    }
-  }
-
-  async function loadModels() {
-    const data = await listChatModels();
-    setModels(data.models || []);
-    const preferred = (data.models || []).find((model) => model.default && model.enabled) || (data.models || []).find((model) => model.enabled);
-    if (preferred) {
-      const nextDefault = `${preferred.provider}|${preferred.model}`;
-      setDefaultModel(nextDefault);
-      setSelectedModel(nextDefault);
     }
   }
 
@@ -143,7 +126,6 @@ export function ChatApp({ user }: ChatAppProps) {
   function startNewConversation() {
     setActiveConversationId(null);
     resetTransientChatState();
-    setSelectedModel(defaultModel);
   }
 
   async function selectConversation(id: string) {
@@ -151,15 +133,10 @@ export function ChatApp({ user }: ChatAppProps) {
     setActiveConversationId(id);
     const data = await getConversationMessages(id);
     upsertConversation({ ...data.conversation, messages: data.messages || [] });
-    const value = data.conversation.chat_provider && data.conversation.chat_model
-      ? `${data.conversation.chat_provider}|${data.conversation.chat_model}`
-      : null;
-    setSelectedModel(value || defaultModel);
   }
 
-  async function createConversation(modelValue = selectedModel) {
-    const [provider, ...modelParts] = modelValue.split("|");
-    const data = await createConversationApi(provider, modelParts.join("|"));
+  async function createConversation() {
+    const data = await createConversationApi();
     const created = { ...data.conversation, messages: [] };
     upsertConversation(created);
     setActiveConversationId(created.id);
@@ -184,14 +161,6 @@ export function ChatApp({ user }: ChatAppProps) {
         : [...messages, message];
       return { ...conversation, messages: nextMessages };
     }));
-  }
-
-  async function updateConversationModel(value: string) {
-    setSelectedModel(value);
-    if (!activeConversationId) return;
-    const [provider, ...modelParts] = value.split("|");
-    const data = await updateConversationModelApi(activeConversationId, provider, modelParts.join("|"));
-    upsertConversation(data.conversation);
   }
 
   async function logoutUser() {
@@ -254,9 +223,7 @@ export function ChatApp({ user }: ChatAppProps) {
     if ((!text && !selectedTool) || isSending) return;
     setIsSending(true);
     setQuestion("");
-    const modelValue = selectedModel;
-    let conversationId = activeConversationId || await createConversation(modelValue);
-    const [provider, ...modelParts] = modelValue.split("|");
+    let conversationId = activeConversationId || await createConversation();
     let assistantId: string | null = null;
     let answer = "";
 
@@ -271,8 +238,6 @@ export function ChatApp({ user }: ChatAppProps) {
           tool_id: selectedTool?.tool.id,
           tool_params: selectedTool?.params,
           conversation_id: conversationId,
-          chat_provider: provider,
-          chat_model: modelParts.join("|"),
         }),
       });
       if (!res.ok || !res.body) throw new Error("خطا در ارسال درخواست");
@@ -281,7 +246,20 @@ export function ChatApp({ user }: ChatAppProps) {
       const decoder = new TextDecoder();
       let buffer = "";
 
-      const handleEvent = (streamEvent: StreamEvent) => {
+      const revealDelta = async (delta: string) => {
+        if (delta.length <= 80) {
+          answer += delta;
+          if (assistantId) upsertMessage(conversationId, { id: assistantId, role: "assistant", content: answer, status: "streaming", stream_status: null });
+          return;
+        }
+        for (let index = 0; index < delta.length; index += 14) {
+          answer += delta.slice(index, index + 14);
+          if (assistantId) upsertMessage(conversationId, { id: assistantId, role: "assistant", content: answer, status: "streaming", stream_status: null });
+          await wait(10);
+        }
+      };
+
+      const handleEvent = async (streamEvent: StreamEvent) => {
         if (streamEvent.type === "conversation") {
           conversationId = streamEvent.conversation.id;
           assistantId = streamEvent.assistant_message.id;
@@ -292,8 +270,7 @@ export function ChatApp({ user }: ChatAppProps) {
         } else if (streamEvent.type === "trace" && assistantId && !answer) {
           upsertMessage(conversationId, { id: assistantId, role: "assistant", content: "", status: "streaming", stream_status: `${traceLabel(streamEvent)}...` });
         } else if (streamEvent.type === "token" && assistantId) {
-          answer += streamEvent.delta || "";
-          upsertMessage(conversationId, { id: assistantId, role: "assistant", content: answer, status: "streaming", stream_status: null });
+          await revealDelta(streamEvent.delta || "");
         } else if (streamEvent.type === "final" && assistantId) {
           answer = answer || streamEvent.answer || "";
           if (streamEvent.generated_output) setActiveOutput(streamEvent.generated_output);
@@ -319,11 +296,11 @@ export function ChatApp({ user }: ChatAppProps) {
         const lines = buffer.split("\n");
         buffer = lines.pop() || "";
         for (const line of lines) {
-          if (line.trim()) handleEvent(JSON.parse(line) as StreamEvent);
+          if (line.trim()) await handleEvent(JSON.parse(line) as StreamEvent);
         }
       }
       buffer += decoder.decode();
-      if (buffer.trim()) handleEvent(JSON.parse(buffer) as StreamEvent);
+      if (buffer.trim()) await handleEvent(JSON.parse(buffer) as StreamEvent);
     } catch (error) {
       const message = error instanceof Error ? error.message : "خطا در ارتباط با سرور";
       if (assistantId) upsertMessage(conversationId, { id: assistantId, role: "assistant", content: message, status: "error" });
@@ -379,7 +356,7 @@ export function ChatApp({ user }: ChatAppProps) {
   return (
     <main className={styles.shell}>
       <div className={`${styles.layout} ${activeOutput ? styles.layoutWithOutput : ""}`}>
-        {activeOutput && <OutputCanvas output={activeOutput} selectedModel={selectedModel} onClose={() => setActiveOutput(null)} />}
+        {activeOutput && <OutputCanvas output={activeOutput} onClose={() => setActiveOutput(null)} />}
 
         <section className={`${styles.workspace} ${hasMessages ? styles.workspaceActive : styles.workspaceEmpty}`}>
           {hasMessages ? (
@@ -387,8 +364,6 @@ export function ChatApp({ user }: ChatAppProps) {
               <MessageList messages={messages} onOpenOutput={(message) => void openOutput(message)} />
               <ChatComposer
                 question={question}
-                selectedModel={selectedModel}
-                models={models}
                 tools={tools}
                 selectedSourceCount={activeAssets.length}
                 selectedTool={selectedTool}
@@ -403,7 +378,6 @@ export function ChatApp({ user }: ChatAppProps) {
                 onQuickToolSelect={selectQuickTool}
                 onClearTool={() => setSelectedTool(null)}
                 onClearSources={clearActiveSources}
-                onModelChange={(value) => void updateConversationModel(value)}
               />
             </>
           ) : (
@@ -414,8 +388,6 @@ export function ChatApp({ user }: ChatAppProps) {
               </div>
               <ChatComposer
                 question={question}
-                selectedModel={selectedModel}
-                models={models}
                 tools={tools}
                 selectedSourceCount={activeAssets.length}
                 selectedTool={selectedTool}
@@ -430,7 +402,6 @@ export function ChatApp({ user }: ChatAppProps) {
                 onQuickToolSelect={selectQuickTool}
                 onClearTool={() => setSelectedTool(null)}
                 onClearSources={clearActiveSources}
-                onModelChange={(value) => void updateConversationModel(value)}
               />
             </div>
           )}

@@ -1,5 +1,5 @@
 import { apiJson } from "@/lib/api";
-import type { Asset, ChatModel, ChatTool, Conversation, ChatMessage, GeneratedOutput, ExamGrade } from "@/types/api";
+import type { Asset, ChatTool, Conversation, ChatMessage, GeneratedOutput, ExamGrade } from "@/types/api";
 
 export async function getCurrentUser() {
   return apiJson<{
@@ -9,10 +9,6 @@ export async function getCurrentUser() {
     phone?: string;
     is_admin?: boolean;
   }>("/api/auth/me");
-}
-
-export async function listChatModels() {
-  return apiJson<{ models: ChatModel[] }>("/api/chat/models");
 }
 
 export async function listTools() {
@@ -26,11 +22,10 @@ export async function getGeneratedOutput(id: string) {
 export async function gradeGeneratedOutput(
   id: string,
   answers: Record<string, string | number>,
-  model?: { provider: string; model: string },
 ) {
   return apiJson<{ grade: ExamGrade }>(`/api/outputs/${encodeURIComponent(id)}/grade`, {
     method: "POST",
-    body: JSON.stringify({ answers, chat_provider: model?.provider, chat_model: model?.model }),
+    body: JSON.stringify({ answers }),
   });
 }
 
@@ -42,17 +37,10 @@ export async function getConversationMessages(id: string) {
   return apiJson<{ conversation: Conversation; messages: ChatMessage[] }>(`/api/conversations/${encodeURIComponent(id)}/messages`);
 }
 
-export async function createConversationApi(chatProvider: string, chatModel: string) {
+export async function createConversationApi() {
   return apiJson<{ conversation: Conversation }>("/api/conversations", {
     method: "POST",
-    body: JSON.stringify({ chat_provider: chatProvider, chat_model: chatModel }),
-  });
-}
-
-export async function updateConversationModelApi(id: string, chatProvider: string, chatModel: string) {
-  return apiJson<{ conversation: Conversation }>(`/api/conversations/${encodeURIComponent(id)}`, {
-    method: "PATCH",
-    body: JSON.stringify({ chat_provider: chatProvider, chat_model: chatModel }),
+    body: JSON.stringify({}),
   });
 }
 

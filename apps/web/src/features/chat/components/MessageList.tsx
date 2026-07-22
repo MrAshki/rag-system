@@ -25,6 +25,10 @@ function answerNodes(content: string, sources: string[] = []) {
   return nodes;
 }
 
+function uniqueSources(sources: string[] = []) {
+  return sources.filter((source, index) => source && sources.indexOf(source) === index);
+}
+
 export function MessageList({
   messages,
   onOpenOutput,
@@ -43,6 +47,16 @@ export function MessageList({
             <span className={styles.messageToolBadge}><AppIcon name="tools" /> {message.tool_title}</span>
           )}
           <div>{message.role === "assistant" ? answerNodes(message.content, message.sources) : message.content}</div>
+          {message.role === "assistant" && uniqueSources(message.sources).length > 0 && (
+            <div className={styles.messageSources} aria-label="منابع پاسخ">
+              <span>منابع</span>
+              {uniqueSources(message.sources).map((source, index) => (
+                <small key={`${source}-${index}`}>
+                  {index + 1}. {source}
+                </small>
+              ))}
+            </div>
+          )}
           {message.role === "assistant" && (message.generated_output_id || message.generated_output) && (
             <button className={styles.openOutputButton} type="button" onClick={() => onOpenOutput(message)}>
               <AppIcon name="output" /> باز کردن در Canvas
