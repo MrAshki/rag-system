@@ -75,7 +75,7 @@ class PGVectorStore(VectorStore):
                         "chunk_index": chunk.chunk_index,
                         "text": chunk.text,
                         "metadata": json.dumps(metadata, ensure_ascii=False),
-                        "embedding_model": settings.embedding_model_path,
+                        "embedding_model": settings.embedding_model,
                         "embedding": _vector_literal(chunk.embedding or []),
                     },
                 )
@@ -130,6 +130,44 @@ class PGVectorStore(VectorStore):
             )
         return results
 
+    def list_chunks(self, filters: dict | None = None, limit: int = 2000) -> list[SearchResult]:
+        filters = filters or {}
+        clauses = []
+        params = {"limit": int(limit)}
+        if filters.get("user_id") is not None:
+            clauses.append("user_id = :user_id")
+            params["user_id"] = filters["user_id"]
+        document_ids = [doc_id for doc_id in (filters.get("document_ids") or []) if doc_id]
+        if document_ids:
+            clauses.append("document_id = ANY(:document_ids)")
+            params["document_ids"] = document_ids
+        elif filters.get("document_id"):
+            clauses.append("document_id = :document_id")
+            params["document_id"] = filters["document_id"]
+        if filters.get("source"):
+            clauses.append("source = :source")
+            params["source"] = filters["source"]
+        where_sql = "WHERE " + " AND ".join(clauses) if clauses else ""
+        with session_scope() as session:
+            rows = session.execute(
+                text(
+                    f"""SELECT text, source, chunk_index, document_id, metadata
+                          FROM document_chunks {where_sql}
+                         ORDER BY document_id, chunk_index LIMIT :limit"""
+                ),
+                params,
+            ).mappings().all()
+        return [
+            SearchResult(
+                text=row["text"],
+                source=row["source"],
+                chunk=row["chunk_index"],
+                document_id=row["document_id"],
+                metadata=row["metadata"] or {},
+            )
+            for row in rows
+        ]
+
     def delete_document(self, document_id: str, user_id: int | None = None) -> int:
         sql = "DELETE FROM document_chunks WHERE document_id = :document_id"
         params = {"document_id": document_id}
@@ -148,4 +186,3 @@ class PGVectorStore(VectorStore):
     def count(self) -> int:
         with session_scope() as session:
             return int(session.execute(text("SELECT COUNT(*) FROM document_chunks")).scalar_one())
-
