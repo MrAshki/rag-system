@@ -33,8 +33,8 @@ def outputs_grade(output_id: str, data: dict = Body(default_factory=dict), user=
     answers = data.get("answers") or {}
     if not isinstance(answers, dict):
         return error_response("پاسخ‌ها نامعتبر هستند", status_code=400)
-    chat_provider = data.get("chat_provider")
-    chat_model = data.get("chat_model")
+    chat_provider = None
+    chat_model = None
     request_id = uuid.uuid4().hex
     try:
         source_message = db.get_message_for_generated_output(output["id"])
@@ -50,8 +50,8 @@ def outputs_grade(output_id: str, data: dict = Body(default_factory=dict), user=
             operation_type="chat_completion",
             metadata={
                 "route": f"/api/outputs/{output_id}/grade",
-                "chat_provider": chat_provider,
-                "chat_model": chat_model,
+                "chat_provider": "backend_default",
+                "chat_model": "backend_default",
             },
         ):
             grade = grade_exam(output["content_json"], answers, provider_name=chat_provider, model=chat_model)

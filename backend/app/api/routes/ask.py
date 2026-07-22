@@ -49,8 +49,8 @@ def _prepare_ask(user, data: dict):
     scope = data.get("scope", "all")
     document_id = data.get("document_id")
     document_name = data.get("document_name")
-    chat_provider = data.get("chat_provider")
-    chat_model = data.get("chat_model")
+    chat_provider = None
+    chat_model = None
     conversation_id = data.get("conversation_id")
     tool_id = data.get("tool_id")
     tool_params = data.get("tool_params")
@@ -124,28 +124,19 @@ def _usage_feature(payload: dict) -> str:
 
 
 def _ensure_conversation(user_id: int, payload: dict):
-    chat_provider = payload["chat_provider"]
-    chat_model = payload["chat_model"]
+    chat_provider = None
+    chat_model = None
     conversation_id = payload["conversation_id"]
 
     if conversation_id:
         conversation = db.get_conversation(user_id, conversation_id)
         if not conversation:
             return None, None, None, error_response("گفتگو پیدا نشد", status_code=404)
-        if chat_provider or chat_model:
-            conversation = db.update_conversation(
-                user_id,
-                conversation_id,
-                chat_provider=chat_provider or conversation["chat_provider"],
-                chat_model=chat_model or conversation["chat_model"],
-            )
-        chat_provider = chat_provider or conversation["chat_provider"]
-        chat_model = chat_model or conversation["chat_model"]
     else:
         conversation = db.create_conversation(
             user_id,
-            chat_provider=chat_provider,
-            chat_model=chat_model,
+            chat_provider=None,
+            chat_model=None,
         )
         conversation_id = conversation["id"]
 

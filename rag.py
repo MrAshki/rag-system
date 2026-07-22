@@ -7,36 +7,25 @@ import re
 import json
 import uuid
 import time
-import torch
 from dotenv import load_dotenv
 import sys
 from typing import Iterable, List, Dict, Optional
 
 from document_pipeline import chunker
+from backend.app.core.config import settings
 from backend.app.vector import get_vector_store
 from backend.app.vector.base import VectorChunk
 from backend.app.vector.embeddings import embed_text, embedding_device
+from backend.app.vector.rerankers import openrouter_rerank, reranker_provider
+from backend.app.retrieval import hybrid_search, retrieve_r2
+from backend.app.grounding import build_grounded_messages, grounded_contract_error, parse_grounded_response
+from backend.app.generation import GenerationPayload, GenerationUnavailableError, GroundedGenerationOrchestrator
 from backend.app.services.usage_tracking import estimate_tokens_from_text, record_compute_usage_event
 from model_gateway import get_chat_provider, list_chat_model_options
 from model_gateway.base import ChatProvider
 
 sys.stdout.reconfigure(encoding="utf-8")
-load_dotenv(override=True)
-
-def _require_env(name: str) -> str:
-    """Fail fast instead of silently falling back to a different model.
-    A silent default here previously meant Chroma's default all-MiniLM-L6-v2
-    or Ollama's llama3.2 could get used by accident if .env was misconfigured
-    -- for embeddings that would silently corrupt the index (queries embedded
-    with one model against vectors built with another)."""
-    value = os.getenv(name)
-    if not value:
-        raise RuntimeError(
-            f"{name} is not set. Add it to .env before running "
-            f"(expected EMBEDDING_MODEL=./models/bge-m3 and OLLAMA_MODEL=gemma3:12b)."
-        )
-    return value
-
+load_dotenv(override=True, encoding="utf-8-sig")
 
 def _positive_int_env(name: str, default: int) -> int:
     """Reads an integer env var, falling back to `default` if unset/blank.
@@ -55,34 +44,47 @@ def _positive_int_env(name: str, default: int) -> int:
     return value
 
 
-EMBEDDING_MODEL = _require_env("EMBEDDING_MODEL")
-OLLAMA_MODEL = _require_env("OLLAMA_MODEL")
+EMBEDDING_MODEL = settings.embedding_model
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL") or os.getenv("CHAT_MODEL") or ""
 OLLAMA_NUM_CTX = _positive_int_env("OLLAMA_NUM_CTX", 4096)
-COLLECTION_NAME = "document_qa_collection_local"
-CHAT_PROVIDER = get_chat_provider()
+CHAT_PROVIDER = get_chat_provider("openrouter", settings.rag_primary_generator_model)
 
 # Bump this whenever the grounding/language prompt or guards change. It is logged
 # at startup and on the health route so we can PROVE which prompt a running server
 # is actually serving (a stale server keeps the old value in memory until restart).
-ANSWER_PROMPT_VERSION = "rerank_v5"
+ANSWER_PROMPT_VERSION = "structured_citations_v2"
 
-# Two-stage retrieval: pull a wide dense net from pgvector (bge-m3), then rerank with a
-# cross-encoder (bge-reranker-v2-m3) and keep the best few. The cross-encoder judges
-# query/chunk relevance far better than dense similarity alone -- e.g. it ranks the
-# book's actual thesis above a sub-argument the author only quotes to rebut.
-RERANKER_MODEL = os.getenv("RERANKER_MODEL", "./models/bge-reranker-v2-m3")
-# CPU by default: the 8 GB GPU already holds bge-m3 and is shared with Ollama; reranking
-# a few dozen short pairs on CPU takes a couple of seconds (latency is not a priority).
+# R2 fuses bounded lexical and Nemotron dense candidates, then reranks exactly once.
+RERANKER_PROVIDER = reranker_provider()
+RERANKER_MODEL = os.getenv(
+    "RERANKER_MODEL",
+    "nvidia/llama-nemotron-rerank-vl-1b-v2:free" if RERANKER_PROVIDER == "openrouter" else "./models/bge-reranker-v2-m3",
+)
+# Local reranking remains a generic gateway capability; production uses OpenRouter.
 RERANKER_DEVICE = os.getenv("RERANKER_DEVICE", "cpu")
 ENABLE_RERANKER = os.getenv("ENABLE_RERANKER", "true").strip().lower() == "true"
 RETRIEVE_K = _positive_int_env("RETRIEVE_K", 30)   # wide dense net before reranking
 RERANK_TOP_K = _positive_int_env("RERANK_TOP_K", 5)  # chunks kept for the answer
+ENABLE_LANGGRAPH_RAG = os.getenv("ENABLE_LANGGRAPH_RAG", "true").strip().lower() == "true"
+ENABLE_HYBRID_RETRIEVAL = os.getenv("ENABLE_HYBRID_RETRIEVAL", "true").strip().lower() == "true"
+LEXICAL_SCAN_LIMIT = _positive_int_env("LEXICAL_SCAN_LIMIT", 2000)
+RETRIEVAL_MODE = settings.rag_retrieval_mode
+CROSS_LANGUAGE_REWRITE_ENABLED = settings.rag_cross_language_rewrite_enabled
+PRIMARY_GENERATOR_MODEL = settings.rag_primary_generator_model
+FALLBACK_GENERATOR_MODEL = settings.rag_fallback_generator_model
+GENERATOR_FALLBACK_ENABLED = settings.rag_generator_fallback_enabled
 
 EMBEDDING_DEVICE = embedding_device()
 if EMBEDDING_DEVICE == "cuda":
-    print(f"Embedding device: cuda - {torch.cuda.get_device_name(0)}")
+    try:
+        import torch
+
+        device_name = torch.cuda.get_device_name(0)
+    except Exception:
+        device_name = "unknown"
+    print(f"Embedding device: cuda - {device_name}")
 else:
-    print("Embedding device: cpu")
+    print(f"Embedding device: {EMBEDDING_DEVICE}")
 
 vector_store = get_vector_store()
 
@@ -91,8 +93,11 @@ print(
     f"[rag] loaded module={os.path.abspath(__file__)} "
     f"ANSWER_PROMPT_VERSION={ANSWER_PROMPT_VERSION} "
     f"CHAT_PROVIDER={CHAT_PROVIDER.name} CHAT_MODEL={CHAT_PROVIDER.model} "
-    f"OLLAMA_MODEL={OLLAMA_MODEL} OLLAMA_NUM_CTX={OLLAMA_NUM_CTX} "
-    f"EMBEDDING_MODEL={EMBEDDING_MODEL} VECTOR_BACKEND=pgvector",
+    f"OLLAMA_MODEL={OLLAMA_MODEL or 'disabled'} OLLAMA_NUM_CTX={OLLAMA_NUM_CTX} "
+    f"EMBEDDING_PROVIDER={settings.embedding_provider} EMBEDDING_MODEL={EMBEDDING_MODEL} "
+    f"VECTOR_BACKEND={settings.vector_backend} RETRIEVAL_MODE={RETRIEVAL_MODE} "
+    f"PRIMARY_GENERATOR={PRIMARY_GENERATOR_MODEL} FALLBACK_GENERATOR={FALLBACK_GENERATOR_MODEL} "
+    f"ENABLE_LANGGRAPH_RAG={ENABLE_LANGGRAPH_RAG}",
     flush=True,
 )
 
@@ -147,6 +152,7 @@ def index_chunks(
     user_id: int = None,
     source_file_type: str = None,
     normalized_md_path: str = None,
+    document_language: str = None,
 ) -> Dict:
     """Index pre-built structure-aware chunks (from chunker.parse_markdown_to_chunks)
     under a stable document_id. Each chunk's stored/embedded text gets the short
@@ -163,12 +169,18 @@ def index_chunks(
             "user_id": user_id,
             "source_file_type": source_file_type,
             "normalized_md_path": normalized_md_path,
+            "document_language": document_language,
             "chapter": ch.get("chapter"),
             "section": ch.get("section"),
             "subsection": ch.get("subsection"),
             "page": ch.get("page"),
             "char_start": ch.get("char_start"),
             "char_end": ch.get("char_end"),
+            "parent_id": ch.get("parent_id"),
+            "parent_title": ch.get("parent_title"),
+            "parent_type": ch.get("parent_type"),
+            "parent_page_start": ch.get("parent_page_start"),
+            "parent_page_end": ch.get("parent_page_end"),
         }
         metadata = {k: v for k, v in metadata.items() if v is not None}
         vector_chunks.append(
@@ -183,14 +195,15 @@ def index_chunks(
             )
         )
         if (i + 1) % 50 == 0 or (i + 1) == len(chunks):
-            print(f"  {filename}: {i+1}/{len(chunks)} chunks indexed", flush=True)
+            print(f"  {filename}: {i+1}/{len(chunks)} chunks prepared", flush=True)
     vector_store.add_chunks(vector_chunks)
+    if chunks:
+        print(f"  {filename}: {len(chunks)}/{len(chunks)} chunks indexed", flush=True)
     return {"document_id": document_id, "chunks": len(chunks)}
 
 
 def list_documents(user_id: int = None) -> List[Dict]:
-    """Return the distinct indexed documents as {document_id, source} for UI display.
-    Scoped to a single user's documents unless user_id is None (admin/internal use)."""
+    """Return scanned documents for UI display, independent of vector backend."""
     from sqlalchemy import text
     from backend.app.db.session import session_scope
 
@@ -199,15 +212,17 @@ def list_documents(user_id: int = None) -> List[Dict]:
     if user_id is not None:
         where = "WHERE user_id = :user_id"
         params["user_id"] = user_id
+    status_clause = "AND" if where else "WHERE"
     with session_scope() as session:
         rows = session.execute(
             text(
                 f"""
-                SELECT document_id, MIN(source) AS source
-                  FROM document_chunks
+                SELECT id AS document_id, original_filename AS source
+                  FROM assets
                   {where}
-                 GROUP BY document_id
-                 ORDER BY MIN(source)
+                 {status_clause} category = 'text'
+                   AND status = 'scanned'
+                 ORDER BY original_filename
                 """
             ),
             params,
@@ -224,6 +239,10 @@ def chat_model_options() -> List[Dict]:
 
 def indexed_chunk_count() -> int:
     return vector_store.count()
+
+
+def delete_document_index(document_id: str, user_id: int = None) -> int:
+    return vector_store.delete_document(document_id, user_id=user_id)
 
 
 def understand_query(text: str, chat_provider: ChatProvider = None) -> List[Dict]:
@@ -309,7 +328,18 @@ def query_documents(
             filters["document_id"] = document_id
 
         query_embedding = embed_text(question)
-        results = vector_store.search(query_embedding, filters=filters, top_k=n_results)
+        results = (
+            hybrid_search(
+                vector_store,
+                query=question,
+                query_embedding=query_embedding,
+                filters=filters,
+                top_k=n_results,
+                lexical_scan_limit=LEXICAL_SCAN_LIMIT,
+            )
+            if ENABLE_HYBRID_RETRIEVAL
+            else vector_store.search(query_embedding, filters=filters, top_k=n_results)
+        )
         chunks = []
         for result in results:
             meta = result.metadata or {}
@@ -323,11 +353,16 @@ def query_documents(
                 "section": meta.get("section"),
                 "subsection": meta.get("subsection"),
                 "page": meta.get("page"),
+                "parent_id": meta.get("parent_id"),
+                "parent_title": meta.get("parent_title"),
+                "parent_type": meta.get("parent_type"),
+                "parent_page_start": meta.get("parent_page_start"),
+                "parent_page_end": meta.get("parent_page_end"),
             })
         return chunks
     except Exception as e:
-        print(f"Error querying documents: {str(e)}")
-        return []
+        print(f"Error querying documents: {str(e)}", flush=True)
+        raise RuntimeError("ارتباط با سرویس بازیابی اسناد برقرار نشد؛ کمی بعد دوباره تلاش کنید.") from e
 
 
 _reranker = None
@@ -358,6 +393,15 @@ def rerank(query: str, chunks: List[Dict], top_k: int) -> List[Dict]:
     if not chunks:
         return []
     if not ENABLE_RERANKER:
+        return chunks[:top_k]
+    if RERANKER_PROVIDER == "openrouter":
+        try:
+            return openrouter_rerank(query, chunks, RERANKER_MODEL, top_k)
+        except Exception as e:
+            print(f"rerank: OpenRouter unavailable, falling back to dense order ({e})", flush=True)
+            return chunks[:top_k]
+    if RERANKER_PROVIDER != "local":
+        print(f"rerank: unsupported RERANKER_PROVIDER={RERANKER_PROVIDER!r}, falling back to dense order", flush=True)
         return chunks[:top_k]
     model = _get_reranker()
     if model is None:
@@ -415,19 +459,130 @@ def rerank(query: str, chunks: List[Dict], top_k: int) -> List[Dict]:
         return chunks[:top_k]
 
 
-def retrieve(query: str, document_id: str = None, document_ids: List[str] = None, user_id: int = None,
-             top_k: int = None) -> List[Dict]:
-    """Two-stage retrieval used by the answer pipeline: dense wide net -> cross-encoder
-    rerank -> top_k. With reranking disabled this degrades to plain dense top_k."""
+def _selected_document_language(
+    *, document_id: str = None, document_ids: List[str] = None, user_id: int = None,
+) -> str | None:
+    import db
+
+    rows = []
+    selected = [value for value in (document_ids or []) if value]
+    if selected and user_id is not None:
+        rows = db.list_assets_by_ids(user_id, selected)
+    elif document_id:
+        row = db.get_asset(document_id)
+        if row and (user_id is None or row.get("user_id") == user_id):
+            rows = [row]
+    languages = set()
+    for row in rows:
+        profile = row.get("document_profile_json") or {}
+        if isinstance(profile, str):
+            try:
+                profile = json.loads(profile)
+            except json.JSONDecodeError:
+                profile = {}
+        language = profile.get("language") if isinstance(profile, dict) else None
+        if language in {"fa", "en"}:
+            languages.add(language)
+    return next(iter(languages)) if len(languages) == 1 else "mixed"
+
+
+def retrieve_with_metadata(
+    query: str, document_id: str = None, document_ids: List[str] = None, user_id: int = None,
+    top_k: int = None, retrieve_k: int = None,
+) -> tuple[List[Dict], Dict]:
+    """Run one bounded production retrieval pass and return its safe telemetry."""
     top_k = top_k or RERANK_TOP_K
-    wide = query_documents(
+    candidate_k = retrieve_k or RETRIEVE_K
+
+    def search(search_query: str) -> List[Dict]:
+        return query_documents(
+            search_query,
+            n_results=candidate_k,
+            document_id=document_id,
+            document_ids=document_ids,
+            user_id=user_id,
+        )
+
+    def rerank_once(rerank_query: str, chunks: List[Dict]) -> List[Dict]:
+        return rerank(rerank_query, chunks, min(len(chunks), max(top_k * 2, top_k)))
+
+    if RETRIEVAL_MODE == "r2":
+        rewrite_provider = get_chat_provider(
+            "openrouter", PRIMARY_GENERATOR_MODEL, feature="chat_grounded",
+        )
+        result = retrieve_r2(
+            query=query,
+            document_language=_selected_document_language(
+                document_id=document_id, document_ids=document_ids, user_id=user_id,
+            ),
+            search=search,
+            rerank=rerank_once,
+            finalize=lambda chunks: diversify_chunks(chunks, top_k),
+            rewrite_provider=rewrite_provider,
+            candidate_k=candidate_k,
+            cross_language_rewrite_enabled=CROSS_LANGUAGE_REWRITE_ENABLED,
+        )
+        return result.chunks, result.telemetry
+
+    wide = search(query)
+    reranked = rerank_once(query, wide)
+    return diversify_chunks(reranked, top_k), {
+        "retrieval_mode": "r1",
+        "rewrite_used": False,
+        "rewrite_status": "disabled",
+        "search_count": 1,
+        "reranker_count": 1 if wide else 0,
+    }
+
+
+def retrieve(query: str, document_id: str = None, document_ids: List[str] = None, user_id: int = None,
+             top_k: int = None, retrieve_k: int = None) -> List[Dict]:
+    chunks, _metadata = retrieve_with_metadata(
         query,
-        n_results=RETRIEVE_K,
         document_id=document_id,
         document_ids=document_ids,
         user_id=user_id,
+        top_k=top_k,
+        retrieve_k=retrieve_k,
     )
-    return rerank(query, wide, top_k)
+    return chunks
+
+
+def diversify_chunks(chunks: List[Dict], top_k: int, max_per_parent: int = 2) -> List[Dict]:
+    """Limit repetitive evidence only when multiple parent units are available.
+
+    Flat articles commonly have one parent for the entire body. Applying a hard
+    two-chunk cap there silently shrinks a five-item evidence budget to two and
+    can remove the only detailed passage even after reranking found it.
+    """
+    parent_keys = []
+    for chunk in chunks:
+        identity = (
+            chunk.get("parent_id")
+            or chunk.get("parent_title")
+            or _clean_heading(chunk.get("subsection"))
+            or _clean_heading(chunk.get("section"))
+            or _clean_heading(chunk.get("chapter"))
+            or chunk.get("chunk")
+        )
+        parent_keys.append((chunk.get("document_id"), identity))
+    effective_parent_limit = top_k if len(set(parent_keys)) <= 1 else max_per_parent
+
+    diversified = []
+    parent_counts = {}
+    seen = set()
+    for chunk, parent_key in zip(chunks, parent_keys):
+        key = (chunk.get("document_id"), chunk.get("chunk"))
+        if key in seen:
+            continue
+        if parent_counts.get(parent_key, 0) >= effective_parent_limit:
+            continue
+        seen.add(key)
+        parent_counts[parent_key] = parent_counts.get(parent_key, 0) + 1
+        diversified.append(chunk)
+        if len(diversified) >= top_k:
+            break
+    return diversified
 
 
 def _clean_heading(value) -> Optional[str]:
@@ -441,19 +596,32 @@ def _clean_heading(value) -> Optional[str]:
     v = str(value).strip()
     if not v or v == "[]":
         return None
+    junk = v.lower()
+    if "www." in junk or "http://" in junk or "https://" in junk or "takbook" in junk or ".com" in junk:
+        return None
+    ordinal = (
+        "اول|دوم|سوم|چهارم|پنجم|ششم|هفتم|هشتم|نهم|دهم|"
+        "یازدهم|دوازدهم|سیزدهم|چهاردهم|پانزدهم|شانزدهم|"
+        "هفدهم|هجدهم|نوزدهم|بیستم"
+    )
+    if re.match(r"^(فصل|بخش)\s+", v) and not re.match(
+        rf"^(فصل|بخش)\s+([0-9۰-۹]+|{ordinal})(?:\s*[:.\-–—]\s*|\s+|$)",
+        v,
+    ):
+        return None
     # Mis-detected paragraph-as-heading: too long, or ends like a sentence.
-    if len(v) > 80 or v.rstrip().endswith((".", "؟", "!", "[1]")):
+    if len(v) > 80 or len(v.split()) > 10 or v.rstrip().endswith((".", "؟", "!", "[1]")):
         return None
     return v
 
 
 def _citation_label(chunk: Dict) -> str:
-    """Builds a citation: filename — <best real heading> — p.N — chunk N.
+    """Builds a human-facing citation: filename - <heading> - PDF page N.
 
     For this corpus `chapter` is the junk "[]" placeholder and `section` is often a
     mis-detected paragraph, while `subsection` holds the real nearby heading. So we
-    cite the most specific *trustworthy* heading available (subsection, then section,
-    then chapter), after filtering junk. Page is included only when present."""
+    cite the most specific *trustworthy* heading available. Page is the original PDF
+    page marker recorded during ingestion; chunk indexes are hidden from users."""
     parts = [chunk["source"]]
     heading = (
         _clean_heading(chunk.get("subsection"))
@@ -463,9 +631,8 @@ def _citation_label(chunk: Dict) -> str:
     if heading:
         parts.append(heading)
     if chunk.get("page"):
-        parts.append(f"p.{chunk['page']}")
-    parts.append(f"chunk {chunk['chunk']}")
-    return " — ".join(parts)
+        parts.append(f"صفحه {chunk['page']}")
+    return " - ".join(parts)
 
 
 def _question_language(text: str) -> str:
@@ -478,7 +645,13 @@ def _question_language(text: str) -> str:
     return "en"
 
 
-def _no_info_message(scope: str) -> str:
+def _no_info_message(scope: str, language: str = "fa") -> str:
+    if language == "en":
+        return (
+            "The selected document does not contain enough information to answer this question."
+            if scope == "selected"
+            else "The available documents do not contain enough information to answer this question."
+        )
     return (
         "در سند انتخاب‌شده اطلاعات کافی برای پاسخ وجود ندارد."
         if scope == "selected"
@@ -492,89 +665,15 @@ def _build_answer_messages(
     scope: str = "all",
     selected_source: str = None,
 ) -> List[Dict]:
-    no_info_message = _no_info_message(scope)
-    context = "\n\n".join(
-        f"[S{i}: {_citation_label(c)}]\n{c['text']}"
-        for i, c in enumerate(relevant_chunks, start=1)
+    no_info_message = _no_info_message(scope, _question_language(question))
+    return build_grounded_messages(
+        question=question,
+        chunks=relevant_chunks,
+        citation_label=_citation_label,
+        no_info_message=no_info_message,
+        language=_question_language(question),
+        selected_source=selected_source if scope == "selected" else None,
     )
-
-    lang = _question_language(question)
-    if lang == "fa":
-        language_directive = (
-            "زبان سؤال کاربر فارسی است. کل پاسخ را فقط و فقط به فارسیِ روان و طبیعی "
-            "بنویس، حتی اگر متنِ بازیابی‌شده انگلیسی باشد."
-        )
-        lang_reminder = "یادآوری: پاسخ را فقط به فارسیِ روان بنویس."
-    else:
-        language_directive = (
-            "The user's question is in English. Write your entire answer in fluent "
-            "English, even if the retrieved context is in another language."
-        )
-        lang_reminder = "Reminder: answer in English."
-
-    scope_instruction = (
-        f"The user restricted the scope to a single document: \"{selected_source}\". "
-        "Use only context from that document. "
-        if scope == "selected"
-        else ""
-    )
-
-    # One short, principled prompt. No rule cascades, no entity regex, no
-    # placeholder templates -- those made answers worse (see plan/). The model is
-    # trusted to apply clear principles; grounding stays strict because the answer
-    # may only use the verbatim retrieved context below.
-    system_content = (
-        "You are a knowledgeable assistant answering questions about the user's "
-        "documents, using only the retrieved context provided below.\n\n"
-        "ANSWER LANGUAGE (most important): " + language_directive + " The answer "
-        "language is decided only by the question, never by the language of the context.\n\n"
-        "GROUNDING: Use only what is actually in the retrieved context. Do not use "
-        "outside or general knowledge, and do not invent facts. You may use ordinary "
-        "reading comprehension (e.g. recognizing that a term and its translation mean the "
-        "same thing).\n\n"
-        "IF the retrieved context does not contain enough to answer, reply with exactly "
-        "this sentence and nothing else: \"" + no_info_message + "\"\n\n"
-        "NAMED-PERSON CHECK (very important): The retrieved context is selected by topic "
-        "and may NOT mention the specific person named in the question. Before you write "
-        "\"<name> believes/says/argues ...\" or otherwise attribute any view to a named "
-        "person, first check whether that person's actual name literally appears in the "
-        "retrieved context. Do NOT assume the person named in the question is the author "
-        "of the document or anyone mentioned in it -- a name only counts as present if it "
-        "literally appears in the retrieved context above. If the name does NOT appear "
-        "there, you must NOT attribute anything to them, must NOT call them the author, "
-        "and must NOT put their name in your answer as a view-holder. Instead, briefly "
-        "note that the text does not specifically discuss that person, then answer about "
-        "the topic itself from the context. Only attribute a view to a person whose name "
-        "actually appears in the retrieved context.\n"
-        "Worked example: if the question is «نظر فلانی درباره اراده آزاد چیه؟» and the "
-        "name «فلانی» does not literally appear in the context (even though the context "
-        "talks about 'the author' or says 'I'), the correct answer begins with something "
-        "like «در متن بازیابی‌شده به‌طور خاص دربارهٔ فلانی چیزی نیامده است» and then "
-        "summarizes the topic. It must NOT say «فلانی نویسنده است» or «فلانی معتقد است ...». "
-        "On the other hand, if the asked name (or an obvious equivalent) DOES literally "
-        "appear in the retrieved context, just answer normally and attribute to them -- do "
-        "NOT add any 'not discussed' note in that case.\n\n"
-        "STYLE: Answer directly, naturally, and fluently, like a knowledgeable person "
-        "explaining clearly. Match the depth to the question -- keep simple questions "
-        "concise, and when the user asks for explanation or detail, give a fuller, "
-        "well-organized answer. Do not be creative or speculative. " + scope_instruction +
-        "\n\n"
-        "CITATIONS: Every factual sentence or bullet that uses the retrieved context MUST "
-        "end with one or more source markers like [S1] or [S2][S4]. Use the S-number from "
-        "the context block that supports that exact claim. Do not put citations in a final "
-        "references section. Do not write a separate sources list. If a sentence combines "
-        "facts from multiple chunks, cite all relevant chunks at the end of that sentence."
-    ).strip()
-
-    user_content = f"Context:\n{context}\n\nQuestion: {question}\n\n{lang_reminder}"
-    return [
-        {"role": "system", "content": system_content},
-        {"role": "user", "content": user_content},
-    ]
-
-
-def _sources_for_answer(answer: str, no_info_message: str, chunks: List[Dict]) -> List[str]:
-    return [] if answer == no_info_message else [_citation_label(c) for c in chunks]
 
 
 def _build_free_chat_messages(question: str) -> List[Dict]:
@@ -594,6 +693,25 @@ def _build_free_chat_messages(question: str) -> List[Dict]:
         },
         {"role": "user", "content": question},
     ]
+
+
+def _grounded_generation_orchestrator(
+    primary_provider: ChatProvider = None,
+    fallback_provider: ChatProvider = None,
+) -> GroundedGenerationOrchestrator:
+    return GroundedGenerationOrchestrator(
+        primary_provider=primary_provider or get_chat_provider(
+            "openrouter", PRIMARY_GENERATOR_MODEL, feature="chat_grounded",
+        ),
+        fallback_provider=fallback_provider or get_chat_provider(
+            "openrouter", FALLBACK_GENERATOR_MODEL, feature="chat_grounded_fallback",
+        ),
+        primary_model=PRIMARY_GENERATOR_MODEL,
+        fallback_model=FALLBACK_GENERATOR_MODEL,
+        fallback_enabled=GENERATOR_FALLBACK_ENABLED,
+        max_attempts=settings.rag_max_generator_attempts,
+        max_output_tokens=settings.rag_max_output_tokens,
+    )
 
 
 def generate_free_response(question: str, chat_provider: ChatProvider = None) -> Dict:
@@ -646,27 +764,52 @@ def generate_response(
     scope: str = "all",
     selected_source: str = None,
     chat_provider: ChatProvider = None,
+    fallback_provider: ChatProvider = None,
+    retrieval_metadata: Dict = None,
 ) -> Dict:
-    no_info_message = _no_info_message(scope)
+    no_info_message = _no_info_message(scope, _question_language(question))
     if not relevant_chunks:
         return {"answer": no_info_message, "sources": []}
 
+    messages = _build_answer_messages(
+        question,
+        relevant_chunks,
+        scope=scope,
+        selected_source=selected_source,
+    )
+    payload = GenerationPayload.build(
+        question=question,
+        messages=messages,
+        evidence=relevant_chunks,
+        answer_language=_question_language(question),
+        answerability_policy="evidence_only_no_answer_when_insufficient",
+        citation_policy="validated_paragraph_end_source_markers",
+        rewrite_used=bool((retrieval_metadata or {}).get("rewrite_used")),
+    )
+    orchestrator = _grounded_generation_orchestrator(chat_provider, fallback_provider)
     try:
-        provider = chat_provider or CHAT_PROVIDER
-        answer = provider.chat(
-            messages=_build_answer_messages(
-                question,
-                relevant_chunks,
-                scope=scope,
-                selected_source=selected_source,
+        result, telemetry = orchestrator.generate(
+            payload=payload,
+            contract_error=lambda raw: grounded_contract_error(
+                raw, evidence_count=len(relevant_chunks),
             ),
-            options={"temperature": 0.0, "num_ctx": OLLAMA_NUM_CTX},
-        ).strip()
-        sources = _sources_for_answer(answer, no_info_message, relevant_chunks)
-        return {"answer": answer, "sources": sources}
-    except Exception as e:
-        print(f"Error generating response: {str(e)}")
-        return {"answer": "خطا در تولید پاسخ.", "sources": []}
+            parse_response=lambda raw: parse_grounded_response(
+                raw,
+                chunks=relevant_chunks,
+                citation_label=_citation_label,
+                no_info_message=no_info_message,
+            ),
+        )
+        result["generation_telemetry"] = telemetry
+        return result
+    except GenerationUnavailableError as exc:
+        print(f"Error generating grounded response: {exc.reason}", flush=True)
+        return {
+            "answer": "سرویس تولید پاسخ موقتاً در دسترس نیست؛ لطفاً دوباره تلاش کنید.",
+            "sources": [],
+            "error": {"code": "generation_unavailable", "reason": exc.reason},
+            "generation_telemetry": exc.telemetry,
+        }
 
 
 def _trace(stage: str, status: str, **data) -> Dict:
@@ -681,8 +824,10 @@ def generate_response_stream(
     scope: str = "all",
     selected_source: str = None,
     chat_provider: ChatProvider = None,
+    fallback_provider: ChatProvider = None,
+    retrieval_metadata: Dict = None,
 ) -> Iterable[Dict]:
-    no_info_message = _no_info_message(scope)
+    no_info_message = _no_info_message(scope, _question_language(question))
     if not relevant_chunks:
         yield {"type": "token", "delta": no_info_message}
         yield {"type": "final", "answer": no_info_message, "sources": []}
@@ -690,22 +835,25 @@ def generate_response_stream(
 
     try:
         provider = chat_provider or CHAT_PROVIDER
-        answer_parts = []
-        for delta in provider.stream_chat(
-            messages=_build_answer_messages(
-                question,
-                relevant_chunks,
-                scope=scope,
-                selected_source=selected_source,
-            ),
-            options={"temperature": 0.0, "num_ctx": OLLAMA_NUM_CTX},
-        ):
-            answer_parts.append(delta)
-            yield {"type": "token", "delta": delta}
-
-        answer = "".join(answer_parts).strip()
-        sources = _sources_for_answer(answer, no_info_message, relevant_chunks)
-        yield {"type": "final", "answer": answer, "sources": sources}
+        result = generate_response(
+            question,
+            relevant_chunks,
+            scope=scope,
+            selected_source=selected_source,
+            chat_provider=provider,
+            fallback_provider=fallback_provider,
+            retrieval_metadata=retrieval_metadata,
+        )
+        if result.get("error"):
+            yield {"type": "error", "error": result["answer"], "code": result["error"]["code"]}
+            return
+        yield {"type": "token", "delta": result["answer"]}
+        yield {
+            "type": "final",
+            "answer": result["answer"],
+            "sources": result["sources"],
+            "generation_telemetry": result.get("generation_telemetry"),
+        }
     except Exception as e:
         print(f"Error streaming response: {str(e)}")
         yield {"type": "error", "error": "خطا در تولید پاسخ."}
@@ -730,6 +878,23 @@ def answer_request(
     Several questions return one organized response that addresses each in turn, each
     grounded only in its own retrieved context (so questions never cross-contaminate
     and the context window never has to hold everything at once)."""
+    if ENABLE_LANGGRAPH_RAG:
+        try:
+            from backend.app.agents.rag_graph import answer_request as graph_answer_request
+            return graph_answer_request(
+                question,
+                scope=scope,
+                document_id=document_id,
+                asset_ids=asset_ids,
+                user_id=user_id,
+                selected_source=selected_source,
+                chat_provider_name=chat_provider_name,
+                chat_model=chat_model,
+                generation_question=generation_question,
+            )
+        except ImportError as e:
+            print(f"LangGraph RAG unavailable, falling back to legacy pipeline ({e})", flush=True)
+
     asset_ids = [asset_id for asset_id in (asset_ids or []) if asset_id]
     doc_filter = document_id if scope == "selected" and not asset_ids else None
     doc_filters = asset_ids or None
@@ -745,7 +910,7 @@ def answer_request(
 
     if len(sub_qs) == 1:
         sq = sub_qs[0]
-        chunks = retrieve(
+        chunks, retrieval_metadata = retrieve_with_metadata(
             sq["search_query"],
             document_id=doc_filter,
             document_ids=doc_filters,
@@ -757,13 +922,14 @@ def answer_request(
             scope=scope,
             selected_source=selected_source,
             chat_provider=provider,
+            retrieval_metadata=retrieval_metadata,
         )
 
     blocks = []
     merged_sources = []
     seen = set()
     for sq in sub_qs:
-        chunks = retrieve(
+        chunks, retrieval_metadata = retrieve_with_metadata(
             sq["search_query"],
             document_id=doc_filter,
             document_ids=doc_filters,
@@ -775,6 +941,7 @@ def answer_request(
             scope=scope,
             selected_source=selected_source,
             chat_provider=provider,
+            retrieval_metadata=retrieval_metadata,
         )
         blocks.append(f"❖ {sq['user_question']}\n{sub['answer']}")
         for s in sub["sources"]:
@@ -804,6 +971,24 @@ def answer_request_stream(
       error: recoverable failure
       done: stream is complete
     """
+    if ENABLE_LANGGRAPH_RAG:
+        try:
+            from backend.app.agents.rag_graph import answer_request_stream as graph_answer_request_stream
+            yield from graph_answer_request_stream(
+                question,
+                scope=scope,
+                document_id=document_id,
+                asset_ids=asset_ids,
+                user_id=user_id,
+                selected_source=selected_source,
+                chat_provider_name=chat_provider_name,
+                chat_model=chat_model,
+                generation_question=generation_question,
+            )
+            return
+        except ImportError as e:
+            print(f"LangGraph RAG unavailable, falling back to legacy pipeline ({e})", flush=True)
+
     asset_ids = [asset_id for asset_id in (asset_ids or []) if asset_id]
     doc_filter = document_id if scope == "selected" and not asset_ids else None
     doc_filters = asset_ids or None
@@ -835,7 +1020,7 @@ def answer_request_stream(
     if len(sub_qs) == 1:
         sq = sub_qs[0]
         yield _trace("retrieve", "started", query=sq["search_query"])
-        chunks = retrieve(
+        chunks, retrieval_metadata = retrieve_with_metadata(
             sq["search_query"],
             document_id=doc_filter,
             document_ids=doc_filters,
@@ -856,6 +1041,7 @@ def answer_request_stream(
             scope=scope,
             selected_source=selected_source,
             chat_provider=provider,
+            retrieval_metadata=retrieval_metadata,
         ):
             if event.get("type") == "final":
                 final_event = event
@@ -879,7 +1065,7 @@ def answer_request_stream(
             question=sq["user_question"],
         )
         yield _trace("retrieve", "started", index=i + 1, query=sq["search_query"])
-        chunks = retrieve(
+        chunks, retrieval_metadata = retrieve_with_metadata(
             sq["search_query"],
             document_id=doc_filter,
             document_ids=doc_filters,
@@ -906,6 +1092,7 @@ def answer_request_stream(
             scope=scope,
             selected_source=selected_source,
             chat_provider=provider,
+            retrieval_metadata=retrieval_metadata,
         ):
             if event.get("type") == "final":
                 final_event = event

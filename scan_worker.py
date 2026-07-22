@@ -16,7 +16,7 @@ import threading
 import db
 import storage
 import rag
-from document_pipeline import ingest, chunker
+from document_pipeline import chunker, document_map, ingest, profiling
 
 # How long the loop sleeps when the queue is empty before re-polling. The upload
 # route calls notify() to wake it immediately, so this is just a safety net.
@@ -66,10 +66,15 @@ def _process_text_asset(asset):
     meta = normalized["meta"]
     markdown_text = normalized["markdown_text"]
 
+    profile = profiling.profile_document(markdown_text, meta, filename=filename)
+
     # If the PDF's text layer was garbled/missing, OCR was required. When OCR
     # didn't actually run (backend missing, disabled, or it errored), refuse to
     # index the bad text -- fail with a clear message instead of storing mojibake.
-    if meta.get("ocr_required") and meta.get("ocr_status") != "applied":
+    if meta.get("ocr_required") and meta.get(
+        "ocr_blocking",
+        meta.get("ocr_status") != "applied",
+    ):
         db.update_asset_status(asset_id, "failed", scan_error=_ocr_failure_message(meta))
         return
 
@@ -80,7 +85,21 @@ def _process_text_asset(asset):
         )
         return
 
+    if not profile.quality.indexable:
+        db.update_asset_status(
+            asset_id,
+            "failed",
+            scan_error="کیفیت متن استخراج‌شده برای جست‌وجوی قابل اعتماد کافی نیست.",
+            document_profile=profile.to_dict(),
+            quality_status=profile.quality.status,
+            quality_score=profile.quality.score,
+            content_hash=profile.content_hash,
+        )
+        return
+
     md_path = storage.normalized_md_path(user_id, "text", asset_id)
+    map_path = storage.document_map_path(user_id, "text", asset_id)
+    doc_map = document_map.build_document_map(markdown_text, profile)
     metadata = {
         "document_id": asset_id,
         "original_filename": filename,
@@ -90,11 +109,15 @@ def _process_text_asset(asset):
         "user_id": user_id,
         "created_at": ingest.now_iso(),
         "normalization_version": ingest.NORMALIZATION_VERSION,
+        "document_profile": profile.to_dict(),
+        "document_map_path": map_path,
         **meta,
     }
     ingest.write_normalized(user_id, asset_id, markdown_text, metadata, category="text")
+    document_map.write_document_map(map_path, doc_map)
 
     chunks = chunker.parse_markdown_to_chunks(markdown_text)
+    document_map.assign_chunks_to_units(chunks, doc_map)
     result = rag.index_chunks(
         filename=filename,
         chunks=chunks,
@@ -102,6 +125,7 @@ def _process_text_asset(asset):
         user_id=user_id,
         source_file_type=ext.lstrip("."),
         normalized_md_path=md_path,
+        document_language=profile.language,
     )
 
     db.update_asset_status(
@@ -109,6 +133,12 @@ def _process_text_asset(asset):
         chunk_count=result["chunks"],
         normalized_md_path=md_path,
         extraction_warning=meta.get("extraction_quality_warning"),
+        document_profile=profile.to_dict(),
+        document_map_path=map_path,
+        processing_version=f"{ingest.NORMALIZATION_VERSION}:{profile.version}:{doc_map['version']}",
+        content_hash=profile.content_hash,
+        quality_status=profile.quality.status,
+        quality_score=profile.quality.score,
         set_scanned_at=True,
     )
 
@@ -125,6 +155,12 @@ def process_asset(asset):
             db.update_asset_status(asset_id, "stored", set_scanned_at=True)
     except Exception as e:  # noqa: BLE001 -- never let one bad file kill the worker
         print(f"[scan_worker] asset {asset_id} failed: {e}", flush=True)
+        try:
+            removed = rag.delete_document_index(asset_id, user_id=asset.get("user_id"))
+            if removed:
+                print(f"[scan_worker] removed {removed} indexed chunk(s) for failed asset {asset_id}", flush=True)
+        except Exception as e2:  # noqa: BLE001
+            print(f"[scan_worker] could not clean vector index for failed asset {asset_id}: {e2}", flush=True)
         try:
             db.update_asset_status(asset_id, "failed", scan_error=str(e))
         except Exception as e2:  # noqa: BLE001
