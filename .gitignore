@@ -16,16 +16,20 @@ chroma_persistent_storage/
 
 # Local maintenance backups of the vector store (large, machine-specific)
 backups/
+tmp/safety-backups/
 
 # Prevent accidental reintroduction of the removed legacy SQLite database.
 app_data.sqlite3
 
 # Runtime server logs
 *.log
+.backend.pid
+.frontend.pid
 
 # User-uploaded documents (runtime data, not source)
 docs/*
 !docs/.gitkeep
+!docs/rag-model-selection-summary.md
 
 # Per-user file store: originals + normalized markdown + metadata (runtime data).
 # Replaces the old flat docs/ + converted/ layout; regenerated from uploads.

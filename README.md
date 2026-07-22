@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > **This project is under active development.** APIs, database schemas, configuration keys, model routing, and user-facing workflows may change without backward compatibility. It is not ready for production use yet.
 
-RAG System is a document intelligence platform for uploading, processing, searching, and chatting with private documents. It combines a Next.js workspace with a FastAPI backend, PostgreSQL/pgvector retrieval, local multilingual embedding and reranking models, and a configurable LLM gateway.
+RAG System is a document intelligence platform for uploading, processing, searching, and chatting with private documents. It combines a Next.js workspace with a FastAPI backend, PostgreSQL application storage, Qdrant retrieval, and an OpenRouter-backed model gateway.
 
 The product is designed around a Persian-first user experience while keeping the retrieval and model infrastructure multilingual. Users can ask grounded questions, inspect cited sources, generate structured learning or writing artifacts, and manage their document library from one interface.
 
@@ -16,9 +16,9 @@ The product is designed around a Persian-first user experience while keeping the
 | General chat | Model-based answers when no document source is selected |
 | Document tools | Summaries, key points, document comparison, exams, flashcards, article drafts, legal drafts, legal reviews, and rewriting |
 | Structured outputs | Dedicated output canvas for exams, flashcards, articles, and other generated artifacts |
-| Conversations | Persistent chat history, model selection, renaming, continuation, and deletion |
+| Conversations | Persistent chat history, renaming, continuation, and deletion |
 | Administration | User, subscription, payment, and usage visibility for administrators |
-| Model routing | Ollama, LiteLLM, Gemini, and DeepSeek providers behind a shared gateway |
+| Model routing | Backend-controlled OpenRouter production route behind a shared gateway, with optional generic providers |
 
 ## System Architecture
 
@@ -39,15 +39,15 @@ flowchart TB
     Worker --> Normalize["Normalize TXT, PDF, and DOCX"]
     Normalize --> OCR["Optional OCR"]
     OCR --> Chunk["Structure-aware Chunking"]
-    Chunk --> Embed["BGE-M3 Embeddings"]
-    Embed --> VectorDB["PostgreSQL with pgvector"]
+    Chunk --> Embed["Nemotron Embeddings"]
+    Embed --> VectorDB["Qdrant: rag_documents"]
 
-    Chat --> Search["User-isolated Vector Search"]
+    Chat --> Search["R2 Cross-language Retrieval"]
     Search --> VectorDB
-    Search --> Rerank["BGE Reranker"]
+    Search --> Rerank["Local or OpenRouter Reranker"]
     Rerank --> Context["Grounded Context and Citations"]
-    Context --> Gateway["Model Gateway"]
-    Gateway --> Models["Ollama, LiteLLM, Gemini, or DeepSeek"]
+    Context --> Primary["Gemini 2.5 Flash"]
+    Primary -->|technical or contract failure| Fallback["GLM 5.2"]
 
     Accounts --> Database["PostgreSQL Application Data"]
     Chat --> Database
@@ -60,9 +60,9 @@ flowchart TB
 |---:|---|---|
 | 1 | Next.js application | Authenticates the user and sends a question with optional document IDs and tool metadata |
 | 2 | FastAPI | Validates the session, loads the conversation, and chooses chat or tool execution |
-| 3 | pgvector | Finds candidate chunks belonging only to the current user |
-| 4 | Reranker | Reorders candidates and keeps the strongest evidence |
-| 5 | Model gateway | Sends the question and grounded context to the selected provider |
+| 3 | R2 retrieval | Runs lexical and Nemotron dense retrieval, adding one rewrite only for a language mismatch |
+| 4 | Reranker | Reorders the fused candidates once and keeps the strongest evidence |
+| 5 | Model gateway | Sends immutable grounded context to Gemini, with one same-context GLM fallback on eligible failure |
 | 6 | Streaming API | Returns trace, token, final, and completion events as NDJSON |
 | 7 | PostgreSQL | Persists the conversation, messages, generated outputs, and usage records |
 
@@ -73,10 +73,10 @@ flowchart TB
 | Web | Next.js 16, React 19, TypeScript | Chat workspace, authentication, gallery, profile, admin console, and output canvas |
 | API | FastAPI, Uvicorn, Starlette | Authentication, chat, tools, documents, conversations, payments, administration, and health APIs |
 | Data | PostgreSQL, SQLAlchemy, Alembic | Application data, conversations, assets, generated outputs, payments, and usage events |
-| Retrieval | pgvector | User-isolated embedding storage and similarity search |
-| Embeddings | `BAAI/bge-m3` through Sentence Transformers | Local multilingual document and query embeddings |
-| Reranking | `BAAI/bge-reranker-v2-m3` through CrossEncoder | Second-stage relevance ranking before generation |
-| Model gateway | Ollama, LiteLLM, Gemini, DeepSeek | Shared interface for chat completion and tool workloads |
+| Retrieval | Qdrant | User-isolated lexical and dense candidate retrieval from one production collection |
+| Embeddings | OpenRouter Nemotron 3 Embed 1B | Multilingual document and query embeddings in one 2048-dimensional vector space |
+| Reranking | Local CrossEncoder or OpenRouter rerank | Second-stage relevance ranking before generation |
+| Model gateway | OpenRouter, plus optional generic adapters | Gemini primary generation and bounded GLM fallback |
 | Storage | Local per-user directories | Original files, normalized Markdown, OCR artifacts, and metadata |
 | Processing | Internal FastAPI worker | Claims uploaded assets and moves them through the ingestion pipeline |
 
@@ -95,16 +95,16 @@ flowchart TB
 - TXT, PDF, and DOCX normalization to canonical Markdown
 - Optional OCR fallback for scanned or malformed PDFs
 - Heading-aware chunking with page, section, and offset metadata
-- Local BGE-M3 embedding generation
-- pgvector indexing isolated by user ID
+- Nemotron embedding generation through OpenRouter
+- Qdrant indexing isolated by user ID
 - Background states: `uploaded`, `scanning`, `scanned`, and `failed`
 
 ### Retrieval and Chat
 
-- Dense vector retrieval followed by optional cross-encoder reranking
+- Bounded R2 lexical+dense retrieval followed by one reranker call
 - Grounded prompts with inline source references
 - Free-form chat when no source is selected
-- Selectable model providers and logical model names
+- Backend-controlled production models
 - Streaming responses over newline-delimited JSON
 - Persistent conversations and messages
 
@@ -143,9 +143,8 @@ flowchart TB
 |---|---|
 | Python | A version compatible with the pinned packages in `requirements.txt` |
 | Node.js and npm | Required for the Next.js application |
-| Docker Desktop | Recommended for PostgreSQL/pgvector and optional LiteLLM |
-| Ollama | Required when using the local model provider |
-| Local model files | `models/bge-m3` and, when enabled, `models/bge-reranker-v2-m3` |
+| Docker Desktop | Recommended for PostgreSQL and Qdrant |
+| OpenRouter account | Required for the selected production embedding, reranker, and generators |
 | Tesseract OCR | Optional; required for OCR fallback on scanned PDFs |
 
 ## Local Development
@@ -175,26 +174,35 @@ Copy-Item .env.example .env
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-Place the generated value in `SESSION_SECRET_KEY` or `FLASK_SECRET_KEY`, then review at least these settings:
+Place the generated value in `SESSION_SECRET_KEY` or `FLASK_SECRET_KEY`, add your OpenRouter key, then review at least these non-secret settings:
 
 ```env
 DATABASE_URL=postgresql+psycopg://postgres:CHANGE_ME@127.0.0.1:5432/rag_system
-SESSION_SECRET_KEY=CHANGE_ME
-VECTOR_BACKEND=pgvector
-EMBEDDING_MODEL=./models/bge-m3
-EMBEDDING_MODEL_PATH=./models/bge-m3
-OLLAMA_MODEL=gemma3:12b
+FLASK_SECRET_KEY=CHANGE_ME
+OPENROUTER_API_KEY=CHANGE_ME
+VECTOR_BACKEND=qdrant
+QDRANT_COLLECTION=rag_documents
+RAG_EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b:free
+EMBEDDING_PROVIDER=openrouter
+EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b:free
+EMBEDDING_DIM=2048
+RAG_RETRIEVAL_MODE=r2
+RAG_CROSS_LANGUAGE_REWRITE_ENABLED=true
+RAG_PRIMARY_GENERATOR_MODEL=google/gemini-2.5-flash
+RAG_FALLBACK_GENERATOR_MODEL=z-ai/glm-5.2
+RAG_GENERATOR_FALLBACK_ENABLED=true
+RAG_MAX_GENERATOR_ATTEMPTS=2
 ```
 
 Do not use example secrets in a shared or production environment.
 
-### 3. Start PostgreSQL and pgvector
+### 3. Start PostgreSQL and Qdrant
 
 ```powershell
 docker compose up -d
 ```
 
-The current Compose file exposes PostgreSQL on `127.0.0.1:5432`. If that port is already occupied, update both the Compose port mapping and `DATABASE_URL`.
+The Compose services expose PostgreSQL on `127.0.0.1:5432` and Qdrant on `127.0.0.1:6333`.
 
 ### 4. Apply Database Migrations
 
@@ -202,33 +210,17 @@ The current Compose file exposes PostgreSQL on `127.0.0.1:5432`. If that port is
 .\venv\Scripts\python.exe -m alembic upgrade head
 ```
 
-### 5. Prepare the Local Chat Model
+### 5. Start the Application
+
+The repository runner starts infrastructure, backend, and frontend in dependency order:
 
 ```powershell
-ollama pull gemma3:12b
+.\run-all.cmd
 ```
 
-### 6. Start the Backend
+The API is available at `http://127.0.0.1:5000` and the web application at `http://127.0.0.1:3000`.
 
-```powershell
-.\venv\Scripts\python.exe serve.py
-```
-
-The API is available at `http://127.0.0.1:5000` by default.
-
-### 7. Start the Frontend
-
-In a separate terminal:
-
-```powershell
-cd apps\web
-npm install
-npm run dev
-```
-
-The web application is available at `http://127.0.0.1:3000`. Requests under `/api/*` are proxied to `BACKEND_URL`, which defaults to `http://127.0.0.1:5000`.
-
-### 8. Create an Administrator
+### 6. Create an Administrator
 
 ```powershell
 .\venv\Scripts\python.exe make_admin.py 09123456789
@@ -256,20 +248,30 @@ docker compose up -d
 | `FRONTEND_URL` | `http://127.0.0.1:3000` | Frontend URL exposed by the API |
 | `HOST` / `PORT` | `127.0.0.1` / `5000` | Uvicorn bind address |
 | `DATABASE_URL` | `postgresql+psycopg://...` | SQLAlchemy PostgreSQL connection |
-| `VECTOR_BACKEND` | `pgvector` | Vector backend; pgvector is the implemented option |
-| `EMBEDDING_MODEL_PATH` | `./models/bge-m3` | Local embedding model directory |
-| `EMBEDDING_DIM` | `1024` | Embedding dimension used by BGE-M3 and the vector column |
+| `VECTOR_BACKEND` | `qdrant` | Vector backend: `qdrant` or `pgvector` |
+| `QDRANT_URL` | `http://127.0.0.1:6333` | Local or cloud Qdrant REST endpoint |
+| `QDRANT_API_KEY` | blank for local Docker | Optional Qdrant Cloud or secured self-hosted key |
+| `EMBEDDING_PROVIDER` | `openrouter` | Embedding backend: `openrouter` or `local` |
+| `EMBEDDING_MODEL` | `nvidia/nemotron-3-embed-1b:free` | Embedding model identifier |
+| `EMBEDDING_DIM` | `2048` | Embedding dimension used by the active embedding model |
+| `RAG_RETRIEVAL_MODE` | `r2` | Enables bounded cross-language production retrieval |
+| `RAG_CROSS_LANGUAGE_REWRITE_ENABLED` | `true` | Allows exactly one rewrite when query and document languages differ |
+| `RAG_PRIMARY_GENERATOR_MODEL` | `google/gemini-2.5-flash` | Primary grounded generator |
+| `RAG_FALLBACK_GENERATOR_MODEL` | `z-ai/glm-5.2` | One-shot same-context fallback generator |
+| `RAG_GENERATOR_FALLBACK_ENABLED` | `true` | Enables fallback for technical and response-contract failures only |
+| `RAG_MAX_GENERATOR_ATTEMPTS` | `2` | One primary execution plus at most one fallback execution |
 | `ENABLE_RERANKER` | `true` | Enables second-stage reranking |
-| `RERANKER_MODEL` | `./models/bge-reranker-v2-m3` | Local reranker model directory |
+| `RERANKER_PROVIDER` | `openrouter` | Reranker backend: `openrouter` or `local` |
+| `RERANKER_MODEL` | `nvidia/llama-nemotron-rerank-vl-1b-v2:free` | Active reranker model |
 | `RERANKER_DEVICE` | `cpu` | Reranker execution device |
 | `RETRIEVE_K` | `30` | Dense candidates retrieved before reranking |
 | `RERANK_TOP_K` | `5` | Final chunks supplied to generation |
-| `DEFAULT_CHAT_PROVIDER` | `litellm` | Default model provider |
+| `DEFAULT_CHAT_PROVIDER` | `openrouter` | Backend-selected default chat provider |
 | `OLLAMA_MODEL` | `gemma3:12b` | Default Ollama model |
 | `LITELLM_BASE_URL` | `http://127.0.0.1:4000` | LiteLLM endpoint |
 | `LITELLM_MODEL` | `chat_free` | Default LiteLLM logical model |
 | `GEMINI_API_KEY` | Provider secret | Enables direct Gemini or LiteLLM-to-Gemini calls |
-| `DEEPSEEK_API_KEY` | Provider secret | Enables the direct DeepSeek provider |
+| `OPENROUTER_API_KEY` | Provider secret | Enables OpenRouter chat, embedding, and rerank calls |
 | `ENABLE_OCR_FALLBACK` | `false` | Enables OCR fallback during PDF ingestion |
 | `SMS_PROVIDER` | `console` | Sends OTP messages through the selected provider; console is for development |
 | `ZARINPAL_MERCHANT_ID` | Provider identifier | Enables Zarinpal payment requests |
@@ -289,7 +291,7 @@ See `.env.example` and `backend/app/core/config.py` for the complete configurati
 | Gallery | `/api/gallery/upload` | `POST` | Uploads a document or supported asset |
 | Gallery | `/api/gallery/assets` | `GET` | Lists the current user's assets and status counts |
 | Documents | `/api/documents` | `GET` | Lists processed text documents available as sources |
-| Chat | `/api/chat/models` | `GET` | Lists selectable chat models |
+| Chat | `/api/chat/models` | `GET` | Reports backend-configured chat model options |
 | Chat | `/api/ask` | `POST` | Returns a non-streaming answer |
 | Chat | `/api/ask/stream` | `POST` | Streams an answer as NDJSON events |
 | Conversations | `/api/conversations` | `GET`, `POST` | Lists or creates conversations |
@@ -320,10 +322,10 @@ See `.env.example` and `backend/app/core/config.py` for the complete configurati
 
 ## Testing
 
-Run the test suite from the repository root:
+The production architecture tests use only mocks for model calls:
 
 ```powershell
-.\venv\Scripts\python.exe -m pytest tests
+.\venv\Scripts\python.exe -m unittest tests.generation.test_orchestrator tests.retrieval.test_r2 tests.api.test_health -v
 ```
 
 Run the preprocessing checks directly when working on ingestion:
@@ -356,15 +358,18 @@ Do not treat the current configuration defaults as production recommendations. B
 
 | Task | Command |
 |---|---|
-| Start PostgreSQL | `docker compose up -d` |
+| Start PostgreSQL and Qdrant | `docker compose up -d` |
 | Apply migrations | `.\venv\Scripts\python.exe -m alembic upgrade head` |
-| Start the backend | `.\venv\Scripts\python.exe serve.py` |
-| Start the frontend | `cd apps\web; npm run dev` |
+| Start the full application | `.\run-all.cmd` |
+| Stop the full application | `.\stop-all.cmd` |
 | Create an administrator | `.\venv\Scripts\python.exe make_admin.py <phone>` |
-| Pull the default Ollama model | `ollama pull gemma3:12b` |
 | Start LiteLLM | `cd infra\litellm; docker compose up -d` |
-| Run tests | `.\venv\Scripts\python.exe -m pytest tests` |
+| Run architecture tests | `.\venv\Scripts\python.exe -m unittest tests.generation.test_orchestrator tests.retrieval.test_r2 tests.api.test_health -v` |
 
 ---
 
 **Development notice:** this project is still under active development and should be evaluated as a work in progress, not as a stable production release.
+# Document RAG System
+
+The current ingestion, retrieval, citation, and bounded LangGraph design is documented in
+[`architecture/reliable-rag.md`](architecture/reliable-rag.md).

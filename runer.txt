@@ -8,4 +8,5 @@ cd D:\rag-system
 python serve.py
 
 cd D:\rag-system\apps\web
+.\venv\Scripts\activate
 npm run dev
