@@ -1,0 +1,43 @@
+{
+  "einsteinetal1935.pdf": {
+    "sha256": "2251BCD93DB427682641FD3AE3938389D003ABB11F4CC32B1FC36BDDD4656FBA",
+    "pages": 4,
+    "document_type": "research_article",
+    "title": "Can Quantum-Mechanical Description of Physical Reality Be Considered Complete?",
+    "required_sections": ["Abstract", "Section I", "Section 2"],
+    "required_concepts": ["criterion of reality", "completeness", "wave function", "simultaneous reality"],
+    "exact_pages": {"criterion_of_reality": 1, "two_particle_argument": 3, "conclusion": 4},
+    "forbidden_claims": ["This document is a book chapter", "The lanthanum article is part of the EPR argument"],
+    "cases": [
+      {"id": "epr_fact", "kind": "factual", "question": "What criterion of physical reality do the authors propose?", "expected_pages": [1], "required_concepts": ["predict with certainty", "without disturbing"]},
+      {"id": "epr_extract", "kind": "exact_extraction", "question": "What question do the authors explicitly leave open?", "expected_pages": [4], "required_concepts": ["whether or not such a description exists"]},
+      {"id": "epr_relation", "kind": "entity_relation", "question": "How does the two-particle argument connect simultaneous reality to completeness?", "expected_pages": [3, 4], "required_concepts": ["two systems", "non-commuting", "not complete"]},
+      {"id": "epr_global", "kind": "full_summary", "question": "Summarize the complete argument section by section.", "expected_pages": [1, 2, 3, 4], "required_concepts": ["criterion of reality", "completeness", "two particles", "conclusion"]},
+      {"id": "epr_cross_language", "kind": "cross_language", "question": "معیار واقعیت فیزیکی در این مقاله چیست؟", "expected_pages": [1], "required_concepts": ["certainty", "without disturbing"]},
+      {"id": "epr_unanswerable", "kind": "unanswerable", "question": "What conclusion do the authors draw about Bell's inequality?", "expected_pages": [], "forbidden_concepts": ["Bell"]}
+    ]
+  },
+  "بررس ی انتقادی رو یکرد فلسفی د یوی د بوهم.pdf": {
+    "sha256": "AFB3074831E6636443DA4E863397A17EED3AC06AE7B31E764875A75697569C44",
+    "pages": 18,
+    "document_type": "research_article",
+    "title": "بررسی انتقادی رویکرد فلسفی دیوید بوهم به علیت براساس فلسفۀ ملاصدرا",
+    "required_sections": ["چکیده", "مقدمه", "علیت در فیزیک جدید", "علیت از منظر بوهم", "تحلیل علیت از دو منظر کپنهاگی و بوهمی", "علیت در فلسفۀ صدرایی", "نتیجه‌گیری"],
+    "required_concepts": ["علیت", "تفسیر کپنهاگی", "متغیرهای پنهان", "نظم ضمنی", "اصالت وجود"],
+    "exact_pages": {"introduction": 3, "bohm": 7, "comparison": 11, "mulla_sadra": 13, "conclusion": 17},
+    "forbidden_claims": ["این سند یک فصل کتاب است", "Shinakht تز اصلی مقاله است", "اطلاعات ISSN بخشی از استدلال نویسندگان است"],
+    "cases": [
+      {"id": "fa_abstract", "kind": "abstract", "question": "چکیده مقاله چه ادعایی دارد؟", "expected_pages": [1, 2], "required_concepts": ["علیت", "متغیرهای پنهان", "ملاصدرا"]},
+      {"id": "fa_intro", "kind": "introduction", "question": "هدف و روش پژوهش در مقدمه چیست؟", "expected_pages": [3, 4], "required_concepts": ["توصیفی-تحلیلی", "مقایسه", "خلأ"]},
+      {"id": "fa_numeric", "kind": "numeric", "question": "بوهم در چه سالی صورت‌بندی علی نظریه کوانتوم را ارائه داد؟", "expected_pages": [7], "required_concepts": ["1952"]},
+      {"id": "fa_compare", "kind": "cross_section_comparison", "question": "دیدگاه بوهم درباره علیت را با فلسفه ملاصدرا مقایسه کن.", "expected_pages": [7, 11, 13, 16, 17], "required_concepts": ["متغیرهای پنهان", "اصالت وجود", "علیت"]},
+      {"id": "fa_conclusion", "kind": "conclusion", "question": "نتیجه‌گیری مقاله چیست؟", "expected_pages": [15, 16, 17], "required_concepts": ["اصل علیت", "جهل", "متغیرهای پنهان"]},
+      {"id": "fa_global", "kind": "full_summary", "question": "خلاصه جامع و بخش‌به‌بخش کل مقاله را بده.", "expected_pages": [1, 2, 3, 4, 7, 11, 13, 15, 16, 17], "required_concepts": ["چکیده", "مقدمه", "فیزیک جدید", "بوهم", "کپنهاگی", "ملاصدرا", "نتیجه‌گیری"]},
+      {"id": "fa_cross_language", "kind": "cross_language", "question": "How does Bohm preserve causality in quantum mechanics?", "expected_pages": [7, 11, 13], "required_concepts": ["hidden variables", "causality"]},
+      {"id": "fa_unanswerable", "kind": "unanswerable", "question": "نام آزمایشگاهی که نویسندگان داده‌های خود را در آن گردآوری کردند چیست؟", "expected_pages": [], "forbidden_concepts": ["آزمایشگاه"]},
+      {"id": "fa_followup", "kind": "conversation_followup", "question": "یعنی چی؟", "depends_on": "fa_compare", "expected_pages": [7, 11, 13, 16, 17]},
+      {"id": "fa_quoted_followup", "kind": "quoted_document_statement", "question": "در جمله «اصل علیت بدیهی است» یعنی چی؟", "expected_pages": [15, 16]}
+    ],
+    "not_applicable": ["substantive_table_question", "ocr_required_question"]
+  }
+}
