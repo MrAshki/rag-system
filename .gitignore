@@ -16,7 +16,8 @@ chroma_persistent_storage/
 
 # Local maintenance backups of the vector store (large, machine-specific)
 backups/
-tmp/safety-backups/
+tmp/
+.playwright-mcp/
 
 # Prevent accidental reintroduction of the removed legacy SQLite database.
 app_data.sqlite3
@@ -30,10 +31,16 @@ app_data.sqlite3
 docs/*
 !docs/.gitkeep
 !docs/rag-model-selection-summary.md
+!docs/rag-document-conversation-architecture.md
+!docs/rag-quality-baseline.md
+!docs/rag-production-path-fixes.md
 
 # Per-user file store: originals + normalized markdown + metadata (runtime data).
 # Replaces the old flat docs/ + converted/ layout; regenerated from uploads.
 storage/
+
+# Local Gold Set source PDFs and deterministic fixture PDFs.
+composite_goldset_pdfs/
 
 # Manual test inputs — copied book/test files kept local for manual UI testing
 # (copyrighted source, not for distribution). Keep the folder, ignore its contents.

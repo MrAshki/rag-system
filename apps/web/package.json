@@ -6,7 +6,11 @@
     "dev": "next dev --webpack -H 127.0.0.1 -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:report": "playwright show-report playwright-report"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
@@ -23,6 +27,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

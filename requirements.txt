@@ -37,6 +37,9 @@ Pillow==12.2.0
 requests==2.34.2
 python-dotenv==1.2.2
 
+# Testing
+pytest==9.1.1
+
 # NOTE: PyTorch is installed separately because the CUDA build is not on PyPI.
 # For GPU (recommended), install the CUDA wheel matching your GPU/driver, e.g.:
 #   pip install torch==2.11.0+cu128 --index-url https://download.pytorch.org/whl/cu128
