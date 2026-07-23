@@ -39,9 +39,13 @@ export function MessageList({
   return (
     <div className={styles.messages}>
       {messages.map((message) => (
-        <div className={`${styles.message} ${message.role === "user" ? styles.userMessage : styles.assistantMessage}`} key={message.id}>
+        <div
+          className={`${styles.message} ${message.role === "user" ? styles.userMessage : styles.assistantMessage}`}
+          data-testid={`message-${message.role}`}
+          key={message.id}
+        >
           {message.role === "assistant" && message.status === "streaming" && !message.content && (
-            <span className={styles.trace}>{message.stream_status || message.streamStatus || "در حال آماده‌سازی..."}</span>
+            <span className={styles.trace} data-testid="stream-status">{message.stream_status || message.streamStatus || "در حال آماده‌سازی..."}</span>
           )}
           {message.role === "user" && message.tool_title && (
             <span className={styles.messageToolBadge}><AppIcon name="tools" /> {message.tool_title}</span>

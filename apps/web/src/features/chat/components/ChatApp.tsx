@@ -448,6 +448,7 @@ export function ChatApp({ user }: ChatAppProps) {
       )}
 
       <input
+        data-testid="upload-input"
         ref={fileInputRef}
         type="file"
         accept=".txt,.pdf,.docx"

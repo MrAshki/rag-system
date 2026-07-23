@@ -20,13 +20,16 @@ from typing import Dict, List, Optional, Tuple
 
 from pypdf import PdfReader
 from docx import Document as DocxDocument
+from docx.table import Table as DocxTable
+from docx.text.paragraph import Paragraph as DocxParagraph
 
 from document_pipeline import cleaning
 from document_pipeline import llm_normalize
 from document_pipeline import ocr
+from document_pipeline import pdf_layout
 import storage
 
-NORMALIZATION_VERSION = "v3"
+NORMALIZATION_VERSION = "v4"
 ENABLE_TEXT_CLEANUP = os.getenv("ENABLE_TEXT_CLEANUP", "true").lower() == "true"
 
 # Step 2.5: optional LLM-assisted relabeling, off by default.
@@ -391,11 +394,18 @@ def _tokenize(entries: List[Tuple[str, Optional[Tuple]]], detect_implicit_lists:
             i += 1
             continue
         if forced is not None:
-            flush_para()
             if forced[0] == "heading":
+                flush_para()
                 blocks.append(("heading", forced[1], text, forced[2]))
-            else:
+            elif forced[0] == "list":
+                flush_para()
                 blocks.append(("list", forced[1]))
+            else:
+                # Layout-aware PDF analysis can explicitly identify ordinary
+                # body lines.  Bypassing the generic short-line heuristic keeps
+                # equations, author fragments, and reference continuations from
+                # becoming false headings while preserving paragraph assembly.
+                para_buf.append(text)
             i += 1
             continue
 
@@ -554,8 +564,32 @@ def normalize_docx(file_stream, force_llm_normalization: bool = False) -> Dict:
     doc = DocxDocument(file_stream)
     entries: List[Tuple[str, Optional[Tuple]]] = []
     style_heading_count = 0
+    table_count = 0
 
-    for p in doc.paragraphs:
+    for element in doc.element.body.iterchildren():
+        if element.tag.endswith("}tbl"):
+            table = DocxTable(element, doc)
+            rows = []
+            for row in table.rows:
+                cells = [re.sub(r"\s+", " ", cell.text).strip().replace("|", "\\|") for cell in row.cells]
+                if any(cells):
+                    rows.append(cells)
+            if rows:
+                width = max(len(row) for row in rows)
+                padded = [row + [""] * (width - len(row)) for row in rows]
+                header = padded[0]
+                markdown_table = [
+                    "| " + " | ".join(header) + " |",
+                    "| " + " | ".join("---" for _ in range(width)) + " |",
+                ]
+                markdown_table.extend("| " + " | ".join(row) + " |" for row in padded[1:])
+                entries.append(("\n".join(markdown_table), ("body",)))
+                entries.append(("", None))
+                table_count += 1
+            continue
+        if not element.tag.endswith("}p"):
+            continue
+        p = DocxParagraph(element, doc)
         # python-docx renders soft line breaks (Shift+Enter) within a single
         # Word paragraph as embedded "\n" in p.text -- split those into
         # separate candidate lines, the same unit size as a TXT line, so
@@ -611,6 +645,8 @@ def normalize_docx(file_stream, force_llm_normalization: bool = False) -> Dict:
         "heading_count": stats["total"],
         "char_count": len(markdown_text),
         "extraction_quality_warning": warning,
+        "table_count": table_count,
+        "has_tables": table_count > 0,
     }
     meta.update(llm_meta)
     return {"markdown_text": markdown_text, "meta": meta}
@@ -622,7 +658,8 @@ def normalize_docx(file_stream, force_llm_normalization: bool = False) -> Dict:
 
 def normalize_pdf(file_stream, ocr_artifact_dir: Optional[str] = None,
                   enable_ocr_fallback: Optional[bool] = None,
-                  force_llm_normalization: bool = False) -> Dict:
+                  force_llm_normalization: bool = False,
+                  filename: str = "") -> Dict:
     """Normalize a PDF to Markdown. Pages whose text layer is missing/near-empty
     (scanned) or garbled (broken embedded font) are re-read via OCR (Tesseract,
     Persian) instead of indexing the bad text. OCR is gated by ENABLE_OCR_FALLBACK
@@ -685,13 +722,19 @@ def normalize_pdf(file_stream, ocr_artifact_dir: Optional[str] = None,
     skipped_page_ratio = len(unresolved_ocr_pages) / max(page_count, 1)
     ocr_blocking = skipped_page_ratio > OCR_MAX_SKIPPED_PAGE_RATIO
 
-    # Phase 3: build blocks + Markdown from the (possibly OCR-corrected) page text.
+    # Phase 3: combine reading-order text with font/position/repetition signals,
+    # then build blocks from the (possibly OCR-corrected) pages.  This removes
+    # running headers and journal boilerplate before they can become headings or
+    # embeddings, and it prevents pre-title spillover from another bound article.
+    layout = pdf_layout.analyze_pdf(
+        reader,
+        page_texts,
+        filename=filename or getattr(file_stream, "name", "") or "",
+    )
     page_blocks_list: List[List[Tuple]] = []
     all_blocks: List[Tuple] = []
-    for i, text in enumerate(page_texts):
-        page_blocks = _lines_to_blocks(text, detect_implicit_lists=False)
-        if i == 0:
-            page_blocks = _promote_title(page_blocks)
+    for entries in layout["entries_by_page"]:
+        page_blocks = _tokenize(entries, detect_implicit_lists=False)
         page_blocks_list.append(page_blocks)
         all_blocks.extend(page_blocks)
 
@@ -754,6 +797,7 @@ def normalize_pdf(file_stream, ocr_artifact_dir: Optional[str] = None,
     }
     if ocr_error:
         meta["ocr_error"] = ocr_error
+    meta.update({key: value for key, value in layout.items() if key != "entries_by_page"})
     meta.update(llm_meta)
     return {"markdown_text": markdown_text, "meta": meta}
 
@@ -792,6 +836,7 @@ def normalize_document(filename: str, file_stream, ext: str,
                 file_stream,
                 ocr_artifact_dir=ocr_artifact_dir,
                 force_llm_normalization=force_llm_normalization,
+                filename=filename,
             ),
         )
     raise ValueError(f"Unsupported file type: {ext}")

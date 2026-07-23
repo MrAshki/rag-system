@@ -10,7 +10,7 @@ from typing import Any
 from document_pipeline.profiling import DocumentProfile
 
 
-DOCUMENT_MAP_VERSION = "v1"
+DOCUMENT_MAP_VERSION = "v3"
 PAGE_RE = re.compile(r"^<!--\s*page:(\d+)\s*-->$")
 HEADING_RE = re.compile(r"^(#{1,3})\s+(.+)$")
 CHAPTER_ID_RE = re.compile(
@@ -30,6 +30,7 @@ class DocumentUnit:
     unit_id: str
     order: int
     unit_type: str
+    role: str
     title: str
     char_start: int
     char_end: int
@@ -68,6 +69,60 @@ def _blocks(markdown_text: str) -> list[dict[str, Any]]:
     return result
 
 
+def _section_role(title: str, unit_type: str) -> str:
+    normalized = re.sub(r"[\s‌]+", " ", (title or "").strip().lower())
+    if re.fullmatch(r"(?:abstract|چکیده)", normalized):
+        return "abstract"
+    if re.fullmatch(r"(?:introduction|مقدمه)", normalized):
+        return "introduction"
+    if re.fullmatch(r"(?:references|bibliography|منابع|کتابنامه)", normalized):
+        return "references"
+    if re.search(r"(?:conclusions?|جمع ?بندی|نتیجه ?گیری)", normalized):
+        return "conclusion"
+    if re.search(r"(?:methods?|methodology|materials? and methods?|روش ?کار|روش ?شناسی)", normalized):
+        return "methodology"
+    if re.fullmatch(r"(?:results?|findings?|یافته ?ها|نتایج)", normalized):
+        return "findings"
+    if re.fullmatch(r"(?:discussion|بحث)", normalized):
+        return "discussion"
+    if re.search(r"(?:practical implications?|پیامدهای عملی|کاربردهای عملی)", normalized):
+        return "practical_implications"
+    if re.search(
+        r"(?:acknowledg(?:e)?ments?|قدردانی(?: ?ها)?|سپاسگزاری|"
+        r"author contributions?|مشارکت پدیدآوران|مشارکت نویسندگان|"
+        r"ما.?رکت پدید.?وران|"
+        r"funding|financial support|منابع مالی|حمایت مالی|"
+        r"ethics?|ethical considerations?|ملاحظات اخلاقی|"
+        r"conflicts? of interests?|تعارض منافع|"
+        r"article info|اطلاعات مقاله|publisher|ناشر|journal|مجله)",
+        normalized,
+    ):
+        return "administrative"
+    if unit_type in {"page_window", "semantic_window"}:
+        return "body"
+    return "section"
+
+
+SUBSTANTIVE_ROLES = {
+    "abstract",
+    "introduction",
+    "methodology",
+    "findings",
+    "discussion",
+    "conclusion",
+    "practical_implications",
+    "body",
+    "section",
+}
+
+
+def is_substantive_section(title: str, role: str | None = None) -> bool:
+    """Classify summary scope without deleting queryable document metadata."""
+    classified = _section_role(title, "section")
+    effective = classified if classified != "section" else (role or "section")
+    return effective in SUBSTANTIVE_ROLES and effective not in {"references", "administrative"}
+
+
 def _unit(unit_type: str, title: str, order: int, blocks: list[dict[str, Any]]) -> DocumentUnit:
     content_blocks = [block for block in blocks if not PAGE_RE.match(block["text"])]
     selected = content_blocks or blocks
@@ -78,6 +133,7 @@ def _unit(unit_type: str, title: str, order: int, blocks: list[dict[str, Any]]) 
         unit_id=f"u{order:04d}-{digest[:10]}",
         order=order,
         unit_type=unit_type,
+        role=_section_role(title, unit_type),
         title=title,
         char_start=min(block["start"] for block in selected),
         char_end=max(block["end"] for block in selected),
@@ -110,14 +166,16 @@ def _heading_units(blocks: list[dict[str, Any]], chapter_only: bool) -> list[Doc
             else:
                 heading_key = re.sub(r"\s+", " ", title).strip().lower() if level <= 2 else None
                 starts_unit = bool(heading_key and heading_key != current_heading_key)
-        if starts_unit and current:
+        if starts_unit and any(not PAGE_RE.match(item["text"]) and not HEADING_RE.match(item["text"]) for item in current):
             groups.append((current_title, current))
+            current = []
+        elif starts_unit:
             current = []
         if starts_unit:
             current_title = title or current_title
             current_heading_key = heading_key
         current.append(block)
-    if current:
+    if current and any(not PAGE_RE.match(item["text"]) and not HEADING_RE.match(item["text"]) for item in current):
         groups.append((current_title, current))
     return [_unit("chapter" if chapter_only else "section", title, i, group) for i, (title, group) in enumerate(groups, 1)]
 
@@ -199,6 +257,7 @@ def assign_chunks_to_units(chunks: list[dict[str, Any]], document_map: dict[str,
             chunk["parent_id"] = parent["unit_id"]
             chunk["parent_title"] = parent["title"]
             chunk["parent_type"] = parent["unit_type"]
+            chunk["parent_role"] = parent.get("role")
             chunk["parent_page_start"] = parent.get("page_start")
             chunk["parent_page_end"] = parent.get("page_end")
     return chunks

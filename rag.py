@@ -52,7 +52,7 @@ CHAT_PROVIDER = get_chat_provider("openrouter", settings.rag_primary_generator_m
 # Bump this whenever the grounding/language prompt or guards change. It is logged
 # at startup and on the health route so we can PROVE which prompt a running server
 # is actually serving (a stale server keeps the old value in memory until restart).
-ANSWER_PROMPT_VERSION = "structured_citations_v2"
+ANSWER_PROMPT_VERSION = "structured_citations_v4_section_coverage"
 
 # R2 fuses bounded lexical and Nemotron dense candidates, then reranks exactly once.
 RERANKER_PROVIDER = reranker_provider()
@@ -179,6 +179,7 @@ def index_chunks(
             "parent_id": ch.get("parent_id"),
             "parent_title": ch.get("parent_title"),
             "parent_type": ch.get("parent_type"),
+            "parent_role": ch.get("parent_role"),
             "parent_page_start": ch.get("parent_page_start"),
             "parent_page_end": ch.get("parent_page_end"),
         }
@@ -356,6 +357,7 @@ def query_documents(
                 "parent_id": meta.get("parent_id"),
                 "parent_title": meta.get("parent_title"),
                 "parent_type": meta.get("parent_type"),
+                "parent_role": meta.get("parent_role"),
                 "parent_page_start": meta.get("parent_page_start"),
                 "parent_page_end": meta.get("parent_page_end"),
             })
@@ -631,7 +633,9 @@ def _citation_label(chunk: Dict) -> str:
     if heading:
         parts.append(heading)
     if chunk.get("page"):
-        parts.append(f"صفحه {chunk['page']}")
+        page_start = int(chunk["page"])
+        page_end = int(chunk.get("page_end") or page_start)
+        parts.append(f"صفحات {page_start} تا {page_end}" if page_end != page_start else f"صفحه {page_start}")
     return " - ".join(parts)
 
 
@@ -664,6 +668,7 @@ def _build_answer_messages(
     relevant_chunks: List[Dict],
     scope: str = "all",
     selected_source: str = None,
+    task_instructions: str = None,
 ) -> List[Dict]:
     no_info_message = _no_info_message(scope, _question_language(question))
     return build_grounded_messages(
@@ -673,6 +678,7 @@ def _build_answer_messages(
         no_info_message=no_info_message,
         language=_question_language(question),
         selected_source=selected_source if scope == "selected" else None,
+        task_instructions=task_instructions,
     )
 
 
@@ -698,6 +704,7 @@ def _build_free_chat_messages(question: str) -> List[Dict]:
 def _grounded_generation_orchestrator(
     primary_provider: ChatProvider = None,
     fallback_provider: ChatProvider = None,
+    max_output_tokens: int = None,
 ) -> GroundedGenerationOrchestrator:
     return GroundedGenerationOrchestrator(
         primary_provider=primary_provider or get_chat_provider(
@@ -710,7 +717,7 @@ def _grounded_generation_orchestrator(
         fallback_model=FALLBACK_GENERATOR_MODEL,
         fallback_enabled=GENERATOR_FALLBACK_ENABLED,
         max_attempts=settings.rag_max_generator_attempts,
-        max_output_tokens=settings.rag_max_output_tokens,
+        max_output_tokens=max_output_tokens or settings.rag_max_output_tokens,
     )
 
 
@@ -725,6 +732,78 @@ def generate_free_response(question: str, chat_provider: ChatProvider = None) ->
     except Exception as e:
         print(f"Error generating free chat response: {str(e)}")
         return {"answer": "خطا در تولید پاسخ.", "sources": []}
+
+
+def generate_conversation_response(
+    question: str,
+    previous_answer: str,
+    chat_provider: ChatProvider = None,
+) -> Dict:
+    """Explain the immediately preceding answer without document operations."""
+    previous_answer = (previous_answer or "").strip()
+    if not previous_answer:
+        return {
+            "answer": "لطفاً مشخص کنید کدام بخش از پاسخ قبلی را می‌خواهید توضیح بدهم.",
+            "sources": [],
+        }
+    provider = chat_provider or CHAT_PROVIDER
+    language = _question_language(question)
+    language_rule = "به فارسی روان و کوتاه پاسخ بده." if language == "fa" else "Answer briefly in clear English."
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "Explain only the immediately preceding assistant answer. "
+                "Do not search documents, introduce new facts, or mention retrieval. "
+                "Resolve a short clarification such as 'what does that mean?' against that answer. "
+                "Return exactly one cohesive paragraph of 80 to 120 words. "
+                "Do not enumerate sections, repeat citation markers, or end mid-sentence. "
+                'Return JSON only: {"explanation": "..."}. '
+                f"{language_rule}"
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"Previous assistant answer:\n{previous_answer[:12000]}\n\nFollow-up:\n{question}",
+        },
+    ]
+    try:
+        answer = provider.chat(
+            messages=messages,
+            options={
+                "temperature": 0.0,
+                "max_tokens": 360,
+                "reasoning": {"effort": "none", "exclude": True},
+                "seed": 17,
+            },
+            response_format="json",
+        ).strip()
+        payload = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", answer, flags=re.IGNORECASE))
+        answer = str(payload.get("explanation") or "").strip()
+        if answer:
+            usage = dict(getattr(provider, "last_call_metadata", {}) or {})
+            return {
+                "answer": answer,
+                "sources": [],
+                "generation_telemetry": {
+                    "fallback_used": False,
+                    "primary_input_tokens": int(usage.get("input_tokens") or 0),
+                    "primary_output_tokens": int(usage.get("output_tokens") or 0),
+                    "primary_cost": float(usage.get("cost_usd") or 0),
+                    "fallback_cost": 0.0,
+                    "total_generation_latency_ms": int(usage.get("latency_ms") or 0),
+                },
+            }
+    except Exception as exc:  # Conversation fallback must never start retrieval.
+        print(f"Error explaining previous answer: {exc.__class__.__name__}", flush=True)
+    fallback = re.sub(r"\s*\[S\d+\]", "", previous_answer)
+    sentences = re.split(r"(?<=[.!؟])\s+", fallback)
+    concise = ""
+    for sentence in sentences:
+        if concise and len(concise) + len(sentence) > 900:
+            break
+        concise = f"{concise} {sentence}".strip()
+    return {"answer": f"به زبان ساده: {concise}", "sources": []}
 
 
 def generate_free_response_stream(question: str, chat_provider: ChatProvider = None) -> Iterable[Dict]:
@@ -766,6 +845,10 @@ def generate_response(
     chat_provider: ChatProvider = None,
     fallback_provider: ChatProvider = None,
     retrieval_metadata: Dict = None,
+    task_instructions: str = None,
+    extra_contract_error=None,
+    max_output_tokens: int = None,
+    support_scope_chunks: List[Dict] = None,
 ) -> Dict:
     no_info_message = _no_info_message(scope, _question_language(question))
     if not relevant_chunks:
@@ -776,6 +859,7 @@ def generate_response(
         relevant_chunks,
         scope=scope,
         selected_source=selected_source,
+        task_instructions=task_instructions,
     )
     payload = GenerationPayload.build(
         question=question,
@@ -786,18 +870,26 @@ def generate_response(
         citation_policy="validated_paragraph_end_source_markers",
         rewrite_used=bool((retrieval_metadata or {}).get("rewrite_used")),
     )
-    orchestrator = _grounded_generation_orchestrator(chat_provider, fallback_provider)
+    orchestrator = _grounded_generation_orchestrator(
+        chat_provider, fallback_provider, max_output_tokens=max_output_tokens,
+    )
+    def validate_contract(raw: str) -> str | None:
+        error = grounded_contract_error(raw, evidence_count=len(relevant_chunks))
+        if error is not None:
+            return error
+        return extra_contract_error(raw) if extra_contract_error is not None else None
+
     try:
         result, telemetry = orchestrator.generate(
             payload=payload,
-            contract_error=lambda raw: grounded_contract_error(
-                raw, evidence_count=len(relevant_chunks),
-            ),
+            contract_error=validate_contract,
             parse_response=lambda raw: parse_grounded_response(
                 raw,
                 chunks=relevant_chunks,
                 citation_label=_citation_label,
                 no_info_message=no_info_message,
+                verify_support=True,
+                support_scope_chunks=support_scope_chunks,
             ),
         )
         result["generation_telemetry"] = telemetry
@@ -807,7 +899,9 @@ def generate_response(
         return {
             "answer": "سرویس تولید پاسخ موقتاً در دسترس نیست؛ لطفاً دوباره تلاش کنید.",
             "sources": [],
-            "error": {"code": "generation_unavailable", "reason": exc.reason},
+            # Detailed failure reasons stay in server-side telemetry. The public
+            # result exposes only a stable code and a controlled message.
+            "error": {"code": "generation_unavailable"},
             "generation_telemetry": exc.telemetry,
         }
 
@@ -869,6 +963,9 @@ def answer_request(
     chat_provider_name: str = None,
     chat_model: str = None,
     generation_question: str = None,
+    conversation_history: List[Dict] = None,
+    conversation_id: str = None,
+    request_id: str = None,
 ) -> Dict:
     """End-to-end answer pipeline used by the app:
         understand the message -> for each distinct question, retrieve its own context
@@ -878,23 +975,28 @@ def answer_request(
     Several questions return one organized response that addresses each in turn, each
     grounded only in its own retrieved context (so questions never cross-contaminate
     and the context window never has to hold everything at once)."""
-    if ENABLE_LANGGRAPH_RAG:
-        try:
-            from backend.app.agents.rag_graph import answer_request as graph_answer_request
-            return graph_answer_request(
-                question,
-                scope=scope,
-                document_id=document_id,
-                asset_ids=asset_ids,
-                user_id=user_id,
-                selected_source=selected_source,
-                chat_provider_name=chat_provider_name,
-                chat_model=chat_model,
-                generation_question=generation_question,
-            )
-        except ImportError as e:
-            print(f"LangGraph RAG unavailable, falling back to legacy pipeline ({e})", flush=True)
+    # This is the sole production orchestrator. ENABLE_LANGGRAPH_RAG controls
+    # whether eligible routes execute through the LangGraph state wrapper; it
+    # never selects a different router or legacy retrieval pipeline.
+    from backend.app.agents.rag_graph import answer_request as orchestrated_answer_request
+    return orchestrated_answer_request(
+        question,
+        scope=scope,
+        document_id=document_id,
+        asset_ids=asset_ids,
+        user_id=user_id,
+        selected_source=selected_source,
+        chat_provider_name=chat_provider_name,
+        chat_model=chat_model,
+        generation_question=generation_question,
+        conversation_history=conversation_history,
+        conversation_id=conversation_id,
+        request_id=request_id,
+        langgraph_enabled=ENABLE_LANGGRAPH_RAG,
+    )
 
+    # Retained temporarily as unreachable migration reference; production can
+    # no longer enter this former parallel path.
     asset_ids = [asset_id for asset_id in (asset_ids or []) if asset_id]
     doc_filter = document_id if scope == "selected" and not asset_ids else None
     doc_filters = asset_ids or None
@@ -961,6 +1063,9 @@ def answer_request_stream(
     chat_provider_name: str = None,
     chat_model: str = None,
     generation_question: str = None,
+    conversation_history: List[Dict] = None,
+    conversation_id: str = None,
+    request_id: str = None,
 ) -> Iterable[Dict]:
     """Streaming twin of answer_request.
 
@@ -971,24 +1076,25 @@ def answer_request_stream(
       error: recoverable failure
       done: stream is complete
     """
-    if ENABLE_LANGGRAPH_RAG:
-        try:
-            from backend.app.agents.rag_graph import answer_request_stream as graph_answer_request_stream
-            yield from graph_answer_request_stream(
-                question,
-                scope=scope,
-                document_id=document_id,
-                asset_ids=asset_ids,
-                user_id=user_id,
-                selected_source=selected_source,
-                chat_provider_name=chat_provider_name,
-                chat_model=chat_model,
-                generation_question=generation_question,
-            )
-            return
-        except ImportError as e:
-            print(f"LangGraph RAG unavailable, falling back to legacy pipeline ({e})", flush=True)
+    from backend.app.agents.rag_graph import answer_request_stream as orchestrated_answer_request_stream
+    yield from orchestrated_answer_request_stream(
+        question,
+        scope=scope,
+        document_id=document_id,
+        asset_ids=asset_ids,
+        user_id=user_id,
+        selected_source=selected_source,
+        chat_provider_name=chat_provider_name,
+        chat_model=chat_model,
+        generation_question=generation_question,
+        conversation_history=conversation_history,
+        conversation_id=conversation_id,
+        request_id=request_id,
+        langgraph_enabled=ENABLE_LANGGRAPH_RAG,
+    )
+    return
 
+    # Unreachable migration reference for the removed legacy stream pipeline.
     asset_ids = [asset_id for asset_id in (asset_ids or []) if asset_id]
     doc_filter = document_id if scope == "selected" and not asset_ids else None
     doc_filters = asset_ids or None

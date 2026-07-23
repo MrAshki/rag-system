@@ -154,6 +154,10 @@ def ask(request: Request, data: dict = Body(default_factory=dict), user=Depends(
     if error:
         return error
     chat_provider, chat_model = model_pair
+    conversation_history = [
+        message_to_json(row)
+        for row in db.list_conversation_messages(user["id"], conversation_id)[-8:]
+    ]
 
     user_message = db.create_conversation_message(
         conversation_id,
@@ -206,6 +210,9 @@ def ask(request: Request, data: dict = Body(default_factory=dict), user=Depends(
                     chat_provider_name=chat_provider,
                     chat_model=chat_model,
                     generation_question=payload["runtime_question"],
+                    conversation_history=conversation_history,
+                    conversation_id=conversation_id,
+                    request_id=request_id,
                 )
         generated_output = _create_tool_output(
             user["id"],
@@ -268,6 +275,10 @@ def ask_stream(request: Request, data: dict = Body(default_factory=dict), user=D
     if error:
         return error
     chat_provider, chat_model = model_pair
+    conversation_history = [
+        message_to_json(row)
+        for row in db.list_conversation_messages(user_id, conversation_id)[-8:]
+    ]
 
     user_message = db.create_conversation_message(
         conversation_id,
@@ -342,6 +353,9 @@ def ask_stream(request: Request, data: dict = Body(default_factory=dict), user=D
                     chat_provider_name=chat_provider,
                     chat_model=chat_model,
                     generation_question=payload["runtime_question"],
+                    conversation_history=conversation_history,
+                    conversation_id=conversation_id,
+                    request_id=request_id,
                 )
             )
             iterator = iter(events)

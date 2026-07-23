@@ -10,7 +10,16 @@ export function traceLabel(event: Extract<StreamEvent, { type: "trace" }>) {
     return "جستجوی منابع و رتبه‌بندی";
   }
   if (event.stage === "generate") return event.status === "done" ? "پاسخ آماده شد" : "تولید پاسخ";
-  if (event.stage === "agent_plan") return "برنامه پاسخ انتخاب شد";
+  if (event.stage === "summary_document_review") return "در حال بررسی کل سند";
+  if (event.stage === "summary_generation") return "در حال تهیه خلاصه جامع";
+  if (event.stage === "summary_validation") return "در حال بررسی پوشش مطالب و منابع";
+  if (event.stage === "conversation_history_review") return "در حال بررسی پیام قبلی";
+  if (event.stage === "conversation_explanation") return "در حال آماده‌سازی توضیح";
+  if (event.stage === "table_inspection") return "در حال بررسی جدول‌ها و داده‌های سند";
+  if (event.stage === "table_matching") return "در حال تطبیق مقادیر";
+  if (event.stage === "retrieval_search") return "در حال جست‌وجوی بخش‌های مرتبط";
+  if (event.stage === "evidence_review") return "در حال بررسی شواهد";
+  if (event.stage === "answer_preparation") return "در حال آماده‌سازی پاسخ";
   if (event.stage === "agent_summary") return event.status === "done" ? "خلاصه جامع آماده شد" : "خلاصه‌سازی جامع";
   if (event.stage === "agent_summary_chapter") {
     const title = event.unit_title ? ` ${event.unit_title}` : "";

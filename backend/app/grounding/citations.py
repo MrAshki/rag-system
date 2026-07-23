@@ -18,6 +18,7 @@ def build_grounded_messages(
     no_info_message: str,
     language: str,
     selected_source: str | None = None,
+    task_instructions: str | None = None,
 ) -> list[dict[str, str]]:
     evidence = "\n\n".join(
         f"<evidence id=\"E{index}\" source=\"{citation_label(chunk)}\">\n{chunk['text']}\n</evidence>"
@@ -40,6 +41,7 @@ def build_grounded_messages(
     system = (
         "Answer the user's question using only the evidence blocks. "
         f"{language_rule} {scope_rule} {multi_source_rule}\n"
+        f"{task_instructions or ''}\n"
         "Do not use outside knowledge. If the evidence is insufficient, set answerable=false. "
         "Every factual paragraph must list one to three exact evidence IDs that best support that paragraph. "
         "Keep separate topics in separate paragraphs instead of attaching many citations to one paragraph. "
@@ -97,6 +99,13 @@ def grounded_contract_error(raw: str, *, evidence_count: int) -> str | None:
             return "required_response_fields_missing"
         if SOURCE_MARKER_RE.search(text):
             return "citation_marker_format_invalid"
+        stripped = text.strip()
+        if len(stripped) >= 120 and re.search(r"[0-9A-Za-z\u0600-\u06ff]$", stripped):
+            return "truncated_output"
+        if re.search(r"(?:\b(?:and|or|because|that|with)|(?:^|\s)(?:و|که|از|به|در))\s*$", stripped, re.IGNORECASE):
+            return "truncated_output"
+        if stripped.endswith(("-", "–", "—", ":")):
+            return "unfinished_output"
         if not 1 <= len(evidence_ids) <= 3:
             return "citation_marker_format_invalid"
         normalized = [str(value or "").upper().replace("S", "E", 1) for value in evidence_ids]
@@ -114,12 +123,31 @@ def _clean_paragraph(text: str) -> str:
     return text
 
 
+def _numeric_anchors(text: str) -> set[str]:
+    """Normalize Persian digits and right-to-left decimal slash notation."""
+    normalized = (text or "").translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹", "0123456789"))
+
+    def replace_slash(match: re.Match) -> str:
+        left, right = match.group(1), match.group(2)
+        if right == "0":
+            return f"0.{left}"
+        if left == "0":
+            return f"0.{right}"
+        return match.group(0)
+
+    normalized = re.sub(r"(?<!\w)([0-9]{1,4})\s*/\s*([0-9]{1,4})(?!\w)", replace_slash, normalized)
+    normalized = normalized.replace("٫", ".").replace(",", ".")
+    return set(re.findall(r"(?<!\w)[0-9]+(?:\.[0-9]+)?", normalized))
+
+
 def parse_grounded_response(
     raw: str,
     *,
     chunks: list[dict[str, Any]],
     citation_label: Callable[[dict[str, Any]], str],
     no_info_message: str,
+    verify_support: bool = False,
+    support_scope_chunks: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     payload = _load_json(raw)
     if not payload:
@@ -139,6 +167,8 @@ def parse_grounded_response(
     rendered_sources: list[str] = []
     source_positions: dict[str, int] = {}
     rendered_paragraphs = []
+    used_evidence_ids: list[str] = []
+    support_results: list[dict[str, Any]] = []
     rejected = 0
 
     for item in (payload.get("paragraphs") or [])[:12]:
@@ -154,6 +184,31 @@ def parse_grounded_response(
         if not text or not ids:
             rejected += 1
             continue
+
+        support_status = "not_checked"
+        if verify_support:
+            cited_text = "\n".join(str(evidence[value].get("text") or "") for value in ids)
+            support_text = cited_text
+            if support_scope_chunks:
+                support_text += "\n" + "\n".join(
+                    str(chunk.get("text") or "")
+                    for chunk in support_scope_chunks
+                )
+            paragraph_numbers = _numeric_anchors(text)
+            evidence_numbers = _numeric_anchors(support_text)
+            quotes = [value.strip() for value in re.findall(r"[«\"“]([^»\"”]{3,})[»\"”]", text)]
+            anchors_ok = paragraph_numbers.issubset(evidence_numbers) and all(value in support_text for value in quotes)
+            if not anchors_ok:
+                rejected += 1
+                support_results.append({"status": "anchor_mismatch", "evidence_ids": ids})
+                continue
+            paragraph_terms = set(re.findall(r"[A-Za-z\u0600-\u06ff]{3,}", text.lower()))
+            evidence_terms = set(re.findall(r"[A-Za-z\u0600-\u06ff]{3,}", cited_text.lower()))
+            support_status = "lexical_overlap" if paragraph_terms & evidence_terms else "anchors_only"
+        support_results.append({"status": support_status, "evidence_ids": ids})
+        for evidence_id in ids:
+            if evidence_id not in used_evidence_ids:
+                used_evidence_ids.append(evidence_id)
 
         markers = []
         for evidence_id in ids:
@@ -179,7 +234,9 @@ def parse_grounded_response(
             "status": "validated",
             "paragraphs": len(rendered_paragraphs),
             "rejected": rejected,
+            "support": support_results,
         },
+        "used_evidence_ids": used_evidence_ids,
     }
 
 

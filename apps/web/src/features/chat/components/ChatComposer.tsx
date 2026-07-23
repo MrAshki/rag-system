@@ -59,6 +59,7 @@ export function ChatComposer({
     <div className={styles.composer}>
       <form className={styles.composerBox} onSubmit={onSubmit}>
         <textarea
+          aria-label="پیام"
           ref={textareaRef}
           value={question}
           rows={1}

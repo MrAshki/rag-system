@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
-PROFILE_VERSION = "v1"
+PROFILE_VERSION = "v2"
 
 PAGE_RE = re.compile(r"^<!--\s*page:(\d+)\s*-->$", re.MULTILINE)
 HEADING_RE = re.compile(r"^(#{1,3})\s+(.+)$", re.MULTILINE)
@@ -46,6 +46,8 @@ class QualityAssessment:
 @dataclass(frozen=True)
 class DocumentProfile:
     version: str
+    title: str | None
+    authors: list[str]
     document_type: str
     type_confidence: float
     unit_strategy: str
@@ -56,6 +58,7 @@ class DocumentProfile:
     heading_count: int
     chapter_count: int
     paragraph_count: int
+    detected_sections: list[str]
     quality: QualityAssessment
 
     def to_dict(self) -> dict[str, Any]:
@@ -153,6 +156,14 @@ def profile_document(
 ) -> DocumentProfile:
     body = _body_text(markdown_text)
     headings = [title.strip() for _marks, title in HEADING_RE.findall(markdown_text or "")]
+    h1_titles = [heading.strip() for marks, heading in HEADING_RE.findall(markdown_text or "") if len(marks) == 1]
+    title = str(normalization_meta.get("document_title") or "").strip() or (h1_titles[0] if h1_titles else None)
+    authors = [
+        str(value).strip()
+        for value in (normalization_meta.get("document_authors") or [])
+        if str(value).strip()
+    ]
+    sections = [heading for heading in headings if not title or heading != title]
     chapters = [heading for heading in headings if CHAPTER_RE.match(heading)]
     pages = [int(value) for value in PAGE_RE.findall(markdown_text or "")]
     paragraphs = [part.strip() for part in re.split(r"\n\s*\n+", body) if part.strip()]
@@ -173,11 +184,16 @@ def profile_document(
         document_type, confidence, strategy = "faq_or_notes", 0.8, "heading_or_semantic"
     elif pages and average_page_chars is not None and average_page_chars < 700 and len(pages) >= 4:
         document_type, confidence, strategy = "slide_deck", 0.72, "page"
-    elif len(headings) >= 3:
+    elif len(headings) >= 2:
         lowered = f"{filename} {' '.join(headings[:5])}".lower()
-        is_paper = any(term in lowered for term in ("abstract", "چکیده", "method", "روش", "references", "منابع"))
-        document_type = "article_or_paper" if is_paper else "sectioned_report"
-        confidence, strategy = 0.8, "heading"
+        all_headings = " ".join(headings).lower()
+        is_paper = (
+            any(term in lowered for term in ("abstract", "چکیده", "method", "روش"))
+            or any(term in all_headings for term in ("references", "منابع", "introduction", "مقدمه"))
+            or bool(normalization_meta.get("document_title") and normalization_meta.get("page_count"))
+        )
+        document_type = "research_article" if is_paper else "sectioned_report"
+        confidence, strategy = (0.92, "heading") if is_paper else (0.8, "heading")
     else:
         document_type, confidence = "flat_document", 0.7
         strategy = "page_window" if pages else "semantic_window"
@@ -185,6 +201,8 @@ def profile_document(
     content_hash = hashlib.sha256((markdown_text or "").encode("utf-8")).hexdigest()
     return DocumentProfile(
         version=PROFILE_VERSION,
+        title=title,
+        authors=authors,
         document_type=document_type,
         type_confidence=confidence,
         unit_strategy=strategy,
@@ -195,5 +213,6 @@ def profile_document(
         heading_count=len(headings),
         chapter_count=len(chapters),
         paragraph_count=len(paragraphs),
+        detected_sections=sections,
         quality=quality,
     )
