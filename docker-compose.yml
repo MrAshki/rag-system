@@ -1,4 +1,9 @@
-﻿services:
+name: rag-system
+
+include:
+  - infra/qdrant/docker-compose.yml
+
+services:
   postgres_pgvector:
     image: pgvector/pgvector:pg18-trixie
     container_name: rag_postgres_pgvector

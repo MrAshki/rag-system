@@ -53,6 +53,8 @@ class GeminiChatProvider:
         options = options or {}
         if "temperature" in options:
             generation_config["temperature"] = options["temperature"]
+        if "max_output_tokens" in options:
+            generation_config["maxOutputTokens"] = options["max_output_tokens"]
         if response_format == "json":
             generation_config["responseMimeType"] = "application/json"
 
@@ -76,19 +78,28 @@ class GeminiChatProvider:
     def _post(self, method: str, *, params=None, payload=None, stream: bool = False, timeout=(10, 180)):
         last_error = None
         for attempt in range(3):
-            response = requests.post(
-                self._url(method),
-                params=params,
-                headers=self._headers(),
-                json=payload,
-                stream=stream,
-                timeout=timeout,
-            )
+            try:
+                response = requests.post(
+                    self._url(method),
+                    params=params,
+                    headers=self._headers(),
+                    json=payload,
+                    stream=stream,
+                    timeout=timeout,
+                )
+            except requests.RequestException as exc:
+                last_error = exc
+                time.sleep(0.75 * (attempt + 1))
+                continue
+            if response.status_code == 429:
+                response.raise_for_status()
             if response.status_code not in (429, 500, 502, 503, 504):
                 response.raise_for_status()
                 return response
             last_error = response
             time.sleep(0.75 * (attempt + 1))
+        if isinstance(last_error, requests.RequestException):
+            raise last_error
         last_error.raise_for_status()
         return last_error
 

@@ -10,6 +10,36 @@ export function traceLabel(event: Extract<StreamEvent, { type: "trace" }>) {
     return "جستجوی منابع و رتبه‌بندی";
   }
   if (event.stage === "generate") return event.status === "done" ? "پاسخ آماده شد" : "تولید پاسخ";
+  if (event.stage === "summary_document_review") return "در حال بررسی کل سند";
+  if (event.stage === "summary_generation") return "در حال تهیه خلاصه جامع";
+  if (event.stage === "summary_validation") return "در حال بررسی پوشش مطالب و منابع";
+  if (event.stage === "multi_document_review") return "در حال بررسی همه سندهای انتخاب‌شده";
+  if (event.stage === "multi_document_summary_generation") return "در حال تهیه خلاصه چندسندی";
+  if (event.stage === "multi_document_comparison_generation") return "در حال مقایسه سندها";
+  if (event.stage === "citation_validation") return "در حال بررسی شواهد و منابع";
+  if (event.stage === "conversation_history_review") return "در حال بررسی پیام قبلی";
+  if (event.stage === "conversation_explanation") return "در حال آماده‌سازی توضیح";
+  if (event.stage === "table_inspection") return "در حال بررسی جدول‌ها و داده‌های سند";
+  if (event.stage === "table_matching") return "در حال تطبیق مقادیر";
+  if (event.stage === "retrieval_search") return "در حال جست‌وجوی بخش‌های مرتبط";
+  if (event.stage === "evidence_review") return "در حال بررسی شواهد";
+  if (event.stage === "answer_preparation") return "در حال آماده‌سازی پاسخ";
+  if (event.stage === "agent_summary") return event.status === "done" ? "خلاصه جامع آماده شد" : "خلاصه‌سازی جامع";
+  if (event.stage === "agent_summary_chapter") {
+    const title = event.unit_title ? ` ${event.unit_title}` : "";
+    if (event.status === "failed") return `خلاصه‌سازی${title} انجام نشد`;
+    if (event.status === "done" && event.cached) return `خلاصه${title} از حافظه آماده شد`;
+    if (event.status === "done") return `خلاصه${title} آماده شد`;
+    return `در حال خلاصه‌سازی${title}`;
+  }
+  if (event.stage === "agent_summary_reduce") {
+    return event.status === "done" ? "جمع‌بندی نهایی آماده شد" : "در حال جمع‌بندی نهایی";
+  }
+  if (event.stage === "agent_summary_window") {
+    if (event.status === "failed") return `دسته شواهد ${event.index}/${event.total} رد شد`;
+    return event.status === "done" ? `دسته شواهد ${event.index}/${event.total} خلاصه شد` : `خلاصه‌سازی شواهد ${event.index}/${event.total}`;
+  }
+  if (event.stage === "agent_retrieve") return "منابع رتبه‌بندی شدند";
   if (event.stage === "sub_question") return event.total ? `بخش ${event.index}/${event.total}` : "بخش سؤال";
   return "پردازش";
 }

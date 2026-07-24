@@ -49,8 +49,8 @@ def _prepare_ask(user, data: dict):
     scope = data.get("scope", "all")
     document_id = data.get("document_id")
     document_name = data.get("document_name")
-    chat_provider = data.get("chat_provider")
-    chat_model = data.get("chat_model")
+    chat_provider = None
+    chat_model = None
     conversation_id = data.get("conversation_id")
     tool_id = data.get("tool_id")
     tool_params = data.get("tool_params")
@@ -124,28 +124,19 @@ def _usage_feature(payload: dict) -> str:
 
 
 def _ensure_conversation(user_id: int, payload: dict):
-    chat_provider = payload["chat_provider"]
-    chat_model = payload["chat_model"]
+    chat_provider = None
+    chat_model = None
     conversation_id = payload["conversation_id"]
 
     if conversation_id:
         conversation = db.get_conversation(user_id, conversation_id)
         if not conversation:
             return None, None, None, error_response("گفتگو پیدا نشد", status_code=404)
-        if chat_provider or chat_model:
-            conversation = db.update_conversation(
-                user_id,
-                conversation_id,
-                chat_provider=chat_provider or conversation["chat_provider"],
-                chat_model=chat_model or conversation["chat_model"],
-            )
-        chat_provider = chat_provider or conversation["chat_provider"]
-        chat_model = chat_model or conversation["chat_model"]
     else:
         conversation = db.create_conversation(
             user_id,
-            chat_provider=chat_provider,
-            chat_model=chat_model,
+            chat_provider=None,
+            chat_model=None,
         )
         conversation_id = conversation["id"]
 
@@ -163,6 +154,10 @@ def ask(request: Request, data: dict = Body(default_factory=dict), user=Depends(
     if error:
         return error
     chat_provider, chat_model = model_pair
+    conversation_history = [
+        message_to_json(row)
+        for row in db.list_conversation_messages(user["id"], conversation_id)[-8:]
+    ]
 
     user_message = db.create_conversation_message(
         conversation_id,
@@ -215,6 +210,9 @@ def ask(request: Request, data: dict = Body(default_factory=dict), user=Depends(
                     chat_provider_name=chat_provider,
                     chat_model=chat_model,
                     generation_question=payload["runtime_question"],
+                    conversation_history=conversation_history,
+                    conversation_id=conversation_id,
+                    request_id=request_id,
                 )
         generated_output = _create_tool_output(
             user["id"],
@@ -277,6 +275,10 @@ def ask_stream(request: Request, data: dict = Body(default_factory=dict), user=D
     if error:
         return error
     chat_provider, chat_model = model_pair
+    conversation_history = [
+        message_to_json(row)
+        for row in db.list_conversation_messages(user_id, conversation_id)[-8:]
+    ]
 
     user_message = db.create_conversation_message(
         conversation_id,
@@ -351,6 +353,9 @@ def ask_stream(request: Request, data: dict = Body(default_factory=dict), user=D
                     chat_provider_name=chat_provider,
                     chat_model=chat_model,
                     generation_question=payload["runtime_question"],
+                    conversation_history=conversation_history,
+                    conversation_id=conversation_id,
+                    request_id=request_id,
                 )
             )
             iterator = iter(events)

@@ -8,7 +8,6 @@ import styles from "@/app/page.module.css";
 
 type OutputCanvasProps = {
   output: GeneratedOutput;
-  selectedModel: string;
   onClose: () => void;
 };
 
@@ -34,7 +33,7 @@ type ExamContent = {
   questions: ExamQuestion[];
 };
 
-export function OutputCanvas({ output, selectedModel, onClose }: OutputCanvasProps) {
+export function OutputCanvas({ output, onClose }: OutputCanvasProps) {
   const exam = getExam(output);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -59,7 +58,7 @@ export function OutputCanvas({ output, selectedModel, onClose }: OutputCanvasPro
           <button onClick={onClose} type="button" title="بستن"><AppIcon name="x" /></button>
         </div>
       </header>
-      {exam ? <ExamCanvas exam={exam} outputId={output.id} selectedModel={selectedModel} /> : (
+      {exam ? <ExamCanvas exam={exam} outputId={output.id} /> : (
         <div className={styles.canvasBody}>
           <article>{output.content_markdown}</article>
         </div>
@@ -68,7 +67,7 @@ export function OutputCanvas({ output, selectedModel, onClose }: OutputCanvasPro
   );
 }
 
-function ExamCanvas({ exam, outputId, selectedModel }: { exam: ExamContent; outputId: string; selectedModel: string }) {
+function ExamCanvas({ exam, outputId }: { exam: ExamContent; outputId: string }) {
   const [answers, setAnswers] = useState<Record<string, string | number>>({});
   const [started, setStarted] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -111,11 +110,7 @@ function ExamCanvas({ exam, outputId, selectedModel }: { exam: ExamContent; outp
     setIsGrading(true);
     setGradeError("");
     try {
-      const [provider, ...modelParts] = selectedModel.split("|");
-      const data = await gradeGeneratedOutput(outputId, answersRef.current, {
-        provider,
-        model: modelParts.join("|"),
-      });
+      const data = await gradeGeneratedOutput(outputId, answersRef.current);
       setGrade(data.grade);
       setSubmitted(true);
     } catch (error) {

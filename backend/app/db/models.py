@@ -7,6 +7,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Float,
     Index,
     Integer,
     Numeric,
@@ -110,6 +111,12 @@ class Asset(Base):
     original_path: Mapped[str] = mapped_column(Text, nullable=False)
     normalized_md_path: Mapped[str | None] = mapped_column(Text)
     extraction_warning: Mapped[str | None] = mapped_column(Text)
+    document_profile_json: Mapped[dict | None] = mapped_column(JSONB)
+    document_map_path: Mapped[str | None] = mapped_column(Text)
+    processing_version: Mapped[str | None] = mapped_column(Text)
+    content_hash: Mapped[str | None] = mapped_column(Text)
+    quality_status: Mapped[str | None] = mapped_column(Text)
+    quality_score: Mapped[float | None] = mapped_column(Float)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
     scanned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -117,6 +124,21 @@ class Asset(Base):
         Index("idx_assets_user", "user_id", "category", "created_at"),
         Index("idx_assets_status", "status"),
     )
+
+
+class DocumentUnitSummary(Base):
+    __tablename__ = "document_unit_summaries"
+
+    asset_id: Mapped[str] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), primary_key=True)
+    unit_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    content_hash: Mapped[str] = mapped_column(Text, primary_key=True)
+    provider: Mapped[str] = mapped_column(Text, primary_key=True)
+    model: Mapped[str] = mapped_column(Text, primary_key=True)
+    summary_text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    __table_args__ = (Index("idx_document_unit_summaries_asset", "asset_id", "updated_at"),)
 
 
 class Conversation(Base):

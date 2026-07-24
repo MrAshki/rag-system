@@ -35,6 +35,11 @@ class VectorStore(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def list_chunks(self, filters: dict | None = None, limit: int = 2000) -> list[SearchResult]:
+        """Return payload text for bounded, local lexical ranking."""
+        raise NotImplementedError
+
+    @abstractmethod
     def delete_document(self, document_id: str, user_id: int | None = None) -> int:
         raise NotImplementedError
 
@@ -45,4 +50,3 @@ class VectorStore(ABC):
     @abstractmethod
     def count(self) -> int:
         raise NotImplementedError
-

@@ -10,7 +10,7 @@ from sqlalchemy import text
 from backend.app.core.config import settings
 from backend.app.db.session import engine
 
-load_dotenv(override=True)
+load_dotenv(override=True, encoding="utf-8-sig")
 
 DATABASE_URL = settings.database_url
 
@@ -97,11 +97,37 @@ CREATE TABLE IF NOT EXISTS assets (
     original_path TEXT NOT NULL,
     normalized_md_path TEXT,
     extraction_warning TEXT,
+    document_profile_json JSONB,
+    document_map_path TEXT,
+    processing_version TEXT,
+    content_hash TEXT,
+    quality_status TEXT,
+    quality_score DOUBLE PRECISION,
     created_at TIMESTAMPTZ NOT NULL,
     scanned_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_assets_user   ON assets (user_id, category, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_assets_status ON assets (status);
+ALTER TABLE assets ADD COLUMN IF NOT EXISTS document_profile_json JSONB;
+ALTER TABLE assets ADD COLUMN IF NOT EXISTS document_map_path TEXT;
+ALTER TABLE assets ADD COLUMN IF NOT EXISTS processing_version TEXT;
+ALTER TABLE assets ADD COLUMN IF NOT EXISTS content_hash TEXT;
+ALTER TABLE assets ADD COLUMN IF NOT EXISTS quality_status TEXT;
+ALTER TABLE assets ADD COLUMN IF NOT EXISTS quality_score DOUBLE PRECISION;
+
+CREATE TABLE IF NOT EXISTS document_unit_summaries (
+    asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    unit_id TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    summary_text TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (asset_id, unit_id, content_hash, provider, model)
+);
+CREATE INDEX IF NOT EXISTS idx_document_unit_summaries_asset
+    ON document_unit_summaries (asset_id, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS conversations (
     id TEXT PRIMARY KEY,
@@ -566,6 +592,40 @@ def list_assets_by_ids(user_id: int, asset_ids):
         ).fetchall()
 
 
+def list_scanned_text_assets():
+    with get_db() as conn:
+        return conn.execute(
+            """SELECT * FROM assets
+                WHERE category = 'text' AND status = 'scanned'
+                ORDER BY created_at"""
+        ).fetchall()
+
+
+def get_document_unit_summary(asset_id: str, unit_id: str, content_hash: str, provider: str, model: str):
+    with get_db() as conn:
+        return conn.execute(
+            """SELECT * FROM document_unit_summaries
+                WHERE asset_id = %s AND unit_id = %s AND content_hash = %s
+                  AND provider = %s AND model = %s""",
+            (asset_id, unit_id, content_hash, provider, model),
+        ).fetchone()
+
+
+def upsert_document_unit_summary(asset_id: str, unit_id: str, content_hash: str,
+                                 provider: str, model: str, summary_text: str):
+    ts = now()
+    with get_db() as conn:
+        return conn.execute(
+            """INSERT INTO document_unit_summaries
+                   (asset_id, unit_id, content_hash, provider, model, summary_text, created_at, updated_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+               ON CONFLICT (asset_id, unit_id, content_hash, provider, model)
+               DO UPDATE SET summary_text = EXCLUDED.summary_text, updated_at = EXCLUDED.updated_at
+               RETURNING *""",
+            (asset_id, unit_id, content_hash, provider, model, summary_text, ts, ts),
+        ).fetchone()
+
+
 # ---- conversations ----
 
 def _encode_sources(sources) -> str:
@@ -960,7 +1020,10 @@ def update_compute_usage_events_context(
 
 def update_asset_status(asset_id: str, status: str, scan_error: str = None,
                         chunk_count: int = None, normalized_md_path: str = None,
-                        extraction_warning: str = None, set_scanned_at: bool = False):
+                        extraction_warning: str = None, document_profile=None,
+                        document_map_path: str = None, processing_version: str = None,
+                        content_hash: str = None, quality_status: str = None,
+                        quality_score: float = None, set_scanned_at: bool = False):
     """Patch an asset's scan state. Only non-None fields are written, so callers
     can update just status, or status plus the post-scan result fields."""
     sets = ["status = %s"]
@@ -977,12 +1040,52 @@ def update_asset_status(asset_id: str, status: str, scan_error: str = None,
     if extraction_warning is not None:
         sets.append("extraction_warning = %s")
         params.append(extraction_warning)
+    if document_profile is not None:
+        sets.append("document_profile_json = CAST(%s AS jsonb)")
+        params.append(json.dumps(document_profile, ensure_ascii=False))
+    if document_map_path is not None:
+        sets.append("document_map_path = %s")
+        params.append(document_map_path)
+    if processing_version is not None:
+        sets.append("processing_version = %s")
+        params.append(processing_version)
+    if content_hash is not None:
+        sets.append("content_hash = %s")
+        params.append(content_hash)
+    if quality_status is not None:
+        sets.append("quality_status = %s")
+        params.append(quality_status)
+    if quality_score is not None:
+        sets.append("quality_score = %s")
+        params.append(float(quality_score))
     if set_scanned_at:
         sets.append("scanned_at = %s")
         params.append(now())
     params.append(asset_id)
     with get_db() as conn:
         conn.execute(f"UPDATE assets SET {', '.join(sets)} WHERE id = %s", tuple(params))
+
+
+def prepare_asset_for_rescan(asset_id: str):
+    with get_db() as conn:
+        return conn.execute(
+            """UPDATE assets
+                  SET status = 'scanning',
+                      scan_error = NULL,
+                      chunk_count = NULL,
+                      normalized_md_path = NULL,
+                      extraction_warning = NULL,
+                      document_profile_json = NULL,
+                      document_map_path = NULL,
+                      processing_version = NULL,
+                      content_hash = NULL,
+                      quality_status = NULL,
+                      quality_score = NULL,
+                      scanned_at = NULL
+                WHERE id = %s
+                RETURNING *""",
+            (asset_id,),
+        ).fetchone()
 
 
 def claim_next_uploaded_asset():

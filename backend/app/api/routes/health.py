@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 
 import rag
+from backend.app.core.config import settings
 from backend.app.dependencies import require_login
 
 router = APIRouter()
@@ -10,17 +11,14 @@ router = APIRouter()
 def health():
     return {
         "status": "ok",
-        "answer_prompt_version": rag.ANSWER_PROMPT_VERSION,
-        "chat_provider": rag.CHAT_PROVIDER.name,
-        "chat_model": rag.CHAT_PROVIDER.model,
-        "ollama_model": rag.OLLAMA_MODEL,
-        "ollama_num_ctx": rag.OLLAMA_NUM_CTX,
         "embedding_model": rag.EMBEDDING_MODEL,
-        "reranker_enabled": rag.ENABLE_RERANKER,
-        "reranker_model": rag.RERANKER_MODEL,
-        "retrieve_k": rag.RETRIEVE_K,
-        "rerank_top_k": rag.RERANK_TOP_K,
-        "vector_backend": "pgvector",
+        "retrieval_mode": rag.RETRIEVAL_MODE,
+        "cross_language_rewrite_enabled": rag.CROSS_LANGUAGE_REWRITE_ENABLED,
+        "primary_generator": rag.PRIMARY_GENERATOR_MODEL,
+        "fallback_generator": rag.FALLBACK_GENERATOR_MODEL,
+        "fallback_enabled": rag.GENERATOR_FALLBACK_ENABLED,
+        "vector_backend": settings.vector_backend,
+        "qdrant_collection": settings.qdrant_collection if settings.vector_backend == "qdrant" else None,
         "indexed_chunks": rag.indexed_chunk_count(),
     }
 

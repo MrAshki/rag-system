@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.rag-system/evaluation/dev-goldset/schema.json",
+  "title": "RAG Development Gold Set schemas",
+  "type": "object",
+  "required": ["manifest_record", "task_record", "conversation_record"],
+  "properties": {
+    "manifest_record": {"$ref": "#/$defs/manifest"},
+    "task_record": {"$ref": "#/$defs/task"},
+    "conversation_record": {"$ref": "#/$defs/conversation"}
+  },
+  "$defs": {
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filename", "sha256", "page_count", "primary_language", "secondary_languages",
+        "document_type", "title", "known_test_roles", "known_limitations",
+        "trusted_or_limited_slice", "tables_present", "ocr_degradation_exists",
+        "text_layer_degradation_exists", "repeated_headers_exist"
+      ],
+      "properties": {
+        "filename": {"type": "string", "pattern": "\\.pdf$"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "page_count": {"type": "integer", "minimum": 1},
+        "primary_language": {"enum": ["fa", "en", "mixed"]},
+        "secondary_languages": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "document_type": {"type": "string", "minLength": 1},
+        "title": {"type": "string", "minLength": 1},
+        "known_test_roles": {"type": "array", "minItems": 1, "items": {"type": "string"}, "uniqueItems": true},
+        "known_limitations": {"type": "array", "items": {"type": "string"}},
+        "trusted_or_limited_slice": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "description"],
+          "properties": {
+            "status": {"enum": ["trusted", "limited"]},
+            "description": {"type": "string", "minLength": 1}
+          }
+        },
+        "tables_present": {"type": "boolean"},
+        "ocr_degradation_exists": {"type": "boolean"},
+        "text_layer_degradation_exists": {"type": "boolean"},
+        "repeated_headers_exist": {"type": "boolean"}
+      }
+    },
+    "citation_expectation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "expected_pages", "minimum_citations", "allow_document_only"],
+      "properties": {
+        "required": {"type": "boolean"},
+        "expected_pages": {"type": "array", "items": {"type": "integer", "minimum": 1}, "uniqueItems": true},
+        "minimum_citations": {"type": "integer", "minimum": 0},
+        "allow_document_only": {"type": "boolean"}
+      }
+    },
+    "evidence_description": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["page", "description"],
+      "properties": {
+        "page": {"type": "integer", "minimum": 1},
+        "description": {"type": "string", "minLength": 1}
+      }
+    },
+    "task": {
+      "type": "object",
+      "required": [
+        "query_id", "filename", "document_sha256", "language", "query", "task_type",
+        "expected_intent", "expected_route", "answerability", "acceptable_answers", "required_concepts",
+        "forbidden_claims", "relevant_pages", "evidence_descriptions",
+        "graded_relevance", "retrieval_policy", "citation_expectation",
+        "human_review_notes", "trusted_for_release_comparison"
+      ],
+      "properties": {
+        "query_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]+$"},
+        "filename": {"type": "string", "pattern": "\\.pdf$"},
+        "document_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "language": {"enum": ["fa", "en", "mixed"]},
+        "query": {"type": "string", "minLength": 2},
+        "task_type": {
+          "enum": [
+            "local_factual", "page_specific", "table_or_numerical",
+            "comprehensive_summary", "analytical", "cross_language",
+            "no_answer_or_conflict", "quoted_document_explanation"
+          ]
+        },
+        "expected_intent": {
+          "enum": [
+            "exact_answer", "explain", "compare", "analytical", "extract",
+            "specific_section", "conversational_followup", "retry_previous",
+            "focused_summary", "comprehensive_summary", "free_chat"
+          ]
+        },
+        "expected_route": {
+          "enum": [
+            "focused_rag", "specific_section", "analytical",
+            "comprehensive_summary", "conversational_followup",
+            "retry_previous", "free_chat"
+          ]
+        },
+        "answerability": {"enum": ["answerable", "unanswerable", "conflicting", "ambiguous"]},
+        "acceptable_answers": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "required_concepts": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "forbidden_claims": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "relevant_pages": {"type": "array", "items": {"type": "integer", "minimum": 1}, "uniqueItems": true},
+        "evidence_descriptions": {"type": "array", "items": {"$ref": "#/$defs/evidence_description"}},
+        "graded_relevance": {
+          "type": "object",
+          "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 3}
+        },
+        "retrieval_policy": {"enum": ["required", "allowed", "forbidden"]},
+        "citation_expectation": {"$ref": "#/$defs/citation_expectation"},
+        "human_review_notes": {"type": "string", "minLength": 1},
+        "trusted_for_release_comparison": {"type": "boolean"},
+        "required_sections": {"type": "array", "items": {"type": "string"}},
+        "required_key_claims": {"type": "array", "items": {"type": "string"}},
+        "conclusion_required": {"type": "boolean"},
+        "argument_structure_items": {"type": "array", "items": {"type": "string"}},
+        "contamination_blacklist": {"type": "array", "items": {"type": "string"}},
+        "minimum_page_diversity": {"type": "integer", "minimum": 1},
+        "administrative_sections_to_exclude": {"type": "array", "items": {"type": "string"}},
+        "table_identifier": {"type": "string"},
+        "table_page": {"type": "integer", "minimum": 1},
+        "expected_row": {"type": "string"},
+        "expected_column": {"type": "string"},
+        "expected_value": {},
+        "acceptable_numeric_formats": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "conversation_turn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "turn_id", "query", "antecedent", "must_use_history",
+        "expected_interpretation", "expected_route", "retrieval_policy",
+        "selected_document_persistence_required", "acceptable_response_behavior",
+        "unacceptable_response_behavior"
+      ],
+      "properties": {
+        "turn_id": {"type": "string", "pattern": "^t[1-9][0-9]*$"},
+        "query": {"type": "string", "minLength": 1},
+        "antecedent": {"type": ["string", "null"]},
+        "must_use_history": {"type": "boolean"},
+        "expected_interpretation": {"type": "string", "minLength": 1},
+        "expected_route": {
+          "enum": [
+            "focused_rag", "specific_section", "analytical",
+            "comprehensive_summary", "conversational_followup",
+            "retry_previous", "free_chat"
+          ]
+        },
+        "retrieval_policy": {"enum": ["required", "allowed", "forbidden"]},
+        "selected_document_persistence_required": {"type": "boolean"},
+        "acceptable_response_behavior": {"type": "string", "minLength": 1},
+        "unacceptable_response_behavior": {"type": "string", "minLength": 1}
+      }
+    },
+    "conversation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conversation_id", "filename", "document_sha256", "turns"],
+      "properties": {
+        "conversation_id": {"type": "string", "pattern": "^conv-[a-z0-9-]+$"},
+        "filename": {"type": "string", "pattern": "\\.pdf$"},
+        "document_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "turns": {"type": "array", "minItems": 2, "items": {"$ref": "#/$defs/conversation_turn"}}
+      }
+    }
+  }
+}

@@ -117,7 +117,7 @@ export type AuthState =
 
 export type StreamEvent =
   | { type: "conversation"; conversation: Conversation; user_message: ChatMessage; assistant_message: ChatMessage }
-  | { type: "trace"; stage?: string; status?: string; total?: number; index?: number; tool_id?: string }
+  | { type: "trace"; stage?: string; status?: string; total?: number; index?: number; tool_id?: string; unit_title?: string; source?: string; cached?: boolean }
   | { type: "token"; delta?: string }
   | { type: "final"; answer?: string; sources?: string[]; generated_output?: GeneratedOutput }
   | { type: "error"; error?: string }

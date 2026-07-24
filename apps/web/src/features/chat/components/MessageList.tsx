@@ -25,6 +25,10 @@ function answerNodes(content: string, sources: string[] = []) {
   return nodes;
 }
 
+function uniqueSources(sources: string[] = []) {
+  return sources.filter((source, index) => source && sources.indexOf(source) === index);
+}
+
 export function MessageList({
   messages,
   onOpenOutput,
@@ -35,14 +39,28 @@ export function MessageList({
   return (
     <div className={styles.messages}>
       {messages.map((message) => (
-        <div className={`${styles.message} ${message.role === "user" ? styles.userMessage : styles.assistantMessage}`} key={message.id}>
+        <div
+          className={`${styles.message} ${message.role === "user" ? styles.userMessage : styles.assistantMessage}`}
+          data-testid={`message-${message.role}`}
+          key={message.id}
+        >
           {message.role === "assistant" && message.status === "streaming" && !message.content && (
-            <span className={styles.trace}>{message.stream_status || message.streamStatus || "در حال آماده‌سازی..."}</span>
+            <span className={styles.trace} data-testid="stream-status">{message.stream_status || message.streamStatus || "در حال آماده‌سازی..."}</span>
           )}
           {message.role === "user" && message.tool_title && (
             <span className={styles.messageToolBadge}><AppIcon name="tools" /> {message.tool_title}</span>
           )}
           <div>{message.role === "assistant" ? answerNodes(message.content, message.sources) : message.content}</div>
+          {message.role === "assistant" && uniqueSources(message.sources).length > 0 && (
+            <div className={styles.messageSources} aria-label="منابع پاسخ">
+              <span>منابع</span>
+              {uniqueSources(message.sources).map((source, index) => (
+                <small key={`${source}-${index}`}>
+                  {index + 1}. {source}
+                </small>
+              ))}
+            </div>
+          )}
           {message.role === "assistant" && (message.generated_output_id || message.generated_output) && (
             <button className={styles.openOutputButton} type="button" onClick={() => onOpenOutput(message)}>
               <AppIcon name="output" /> باز کردن در Canvas

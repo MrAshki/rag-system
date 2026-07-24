@@ -1,0 +1,1058 @@
+{
+  "format_version": "1.0",
+  "queries": {
+    "d1366-fact-screening": [
+      {
+        "document_sha256": "7b99a611d1cbe8aec6a922b2b2b87939797cd63a5a17312214041bc4841b3c73",
+        "filename": "doh-13-66.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "7b99a611d1cbe8aec6a922b2b2b87939797cd63a5a17312214041bc4841b3c73#page=1"
+      }
+    ],
+    "d1366-num-referral": [
+      {
+        "document_sha256": "7b99a611d1cbe8aec6a922b2b2b87939797cd63a5a17312214041bc4841b3c73",
+        "filename": "doh-13-66.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "7b99a611d1cbe8aec6a922b2b2b87939797cd63a5a17312214041bc4841b3c73#page=1"
+      }
+    ],
+    "d1366-cross-conclusion": [
+      {
+        "document_sha256": "7b99a611d1cbe8aec6a922b2b2b87939797cd63a5a17312214041bc4841b3c73",
+        "filename": "doh-13-66.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "7b99a611d1cbe8aec6a922b2b2b87939797cd63a5a17312214041bc4841b3c73#page=1"
+      }
+    ],
+    "d1375-fact-screened": [
+      {
+        "document_sha256": "5825ad222bc26d4d8e2b4925c07bc1b5037f9b2c35388894861b0ecd0a434beb",
+        "filename": "doh-13-75.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "5825ad222bc26d4d8e2b4925c07bc1b5037f9b2c35388894861b0ecd0a434beb#page=1"
+      }
+    ],
+    "d1375-page-period": [
+      {
+        "document_sha256": "5825ad222bc26d4d8e2b4925c07bc1b5037f9b2c35388894861b0ecd0a434beb",
+        "filename": "doh-13-75.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "5825ad222bc26d4d8e2b4925c07bc1b5037f9b2c35388894861b0ecd0a434beb#page=1"
+      }
+    ],
+    "d1375-noanswer-vaccine": [],
+    "d145-fact-definition": [
+      {
+        "document_sha256": "f2d09ca71b666223356faa3b77202def772ae886d162b9d007fe7285778344d1",
+        "filename": "doh-14-5.pdf",
+        "page": 3,
+        "relevance": 3,
+        "evidence_id": "f2d09ca71b666223356faa3b77202def772ae886d162b9d007fe7285778344d1#page=3"
+      }
+    ],
+    "d145-num-model": [
+      {
+        "document_sha256": "f2d09ca71b666223356faa3b77202def772ae886d162b9d007fe7285778344d1",
+        "filename": "doh-14-5.pdf",
+        "page": 3,
+        "relevance": 3,
+        "evidence_id": "f2d09ca71b666223356faa3b77202def772ae886d162b9d007fe7285778344d1#page=3"
+      }
+    ],
+    "d145-quote-explain": [
+      {
+        "document_sha256": "f2d09ca71b666223356faa3b77202def772ae886d162b9d007fe7285778344d1",
+        "filename": "doh-14-5.pdf",
+        "page": 3,
+        "relevance": 3,
+        "evidence_id": "f2d09ca71b666223356faa3b77202def772ae886d162b9d007fe7285778344d1#page=3"
+      },
+      {
+        "document_sha256": "f2d09ca71b666223356faa3b77202def772ae886d162b9d007fe7285778344d1",
+        "filename": "doh-14-5.pdf",
+        "page": 14,
+        "relevance": 2,
+        "evidence_id": "f2d09ca71b666223356faa3b77202def772ae886d162b9d007fe7285778344d1#page=14"
+      }
+    ],
+    "d1454-fact-forms": [
+      {
+        "document_sha256": "d38c75858019ccf03b6cad0e745679f04bd88b789ac9dbe42947be1ebd3e559a",
+        "filename": "doh-14-54.pdf",
+        "page": 4,
+        "relevance": 3,
+        "evidence_id": "d38c75858019ccf03b6cad0e745679f04bd88b789ac9dbe42947be1ebd3e559a#page=4"
+      }
+    ],
+    "d1454-page-countries": [
+      {
+        "document_sha256": "d38c75858019ccf03b6cad0e745679f04bd88b789ac9dbe42947be1ebd3e559a",
+        "filename": "doh-14-54.pdf",
+        "page": 4,
+        "relevance": 3,
+        "evidence_id": "d38c75858019ccf03b6cad0e745679f04bd88b789ac9dbe42947be1ebd3e559a#page=4"
+      }
+    ],
+    "d1454-analysis-iran": [
+      {
+        "document_sha256": "d38c75858019ccf03b6cad0e745679f04bd88b789ac9dbe42947be1ebd3e559a",
+        "filename": "doh-14-54.pdf",
+        "page": 4,
+        "relevance": 3,
+        "evidence_id": "d38c75858019ccf03b6cad0e745679f04bd88b789ac9dbe42947be1ebd3e559a#page=4"
+      },
+      {
+        "document_sha256": "d38c75858019ccf03b6cad0e745679f04bd88b789ac9dbe42947be1ebd3e559a",
+        "filename": "doh-14-54.pdf",
+        "page": 5,
+        "relevance": 2,
+        "evidence_id": "d38c75858019ccf03b6cad0e745679f04bd88b789ac9dbe42947be1ebd3e559a#page=5"
+      }
+    ],
+    "d1483-fact-studies": [
+      {
+        "document_sha256": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4",
+        "filename": "doh-14-83.pdf",
+        "page": 4,
+        "relevance": 3,
+        "evidence_id": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4#page=4"
+      }
+    ],
+    "d1483-num-domains": [
+      {
+        "document_sha256": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4",
+        "filename": "doh-14-83.pdf",
+        "page": 4,
+        "relevance": 3,
+        "evidence_id": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4#page=4"
+      },
+      {
+        "document_sha256": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4",
+        "filename": "doh-14-83.pdf",
+        "page": 10,
+        "relevance": 2,
+        "evidence_id": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4#page=10"
+      },
+      {
+        "document_sha256": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4",
+        "filename": "doh-14-83.pdf",
+        "page": 11,
+        "relevance": 2,
+        "evidence_id": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4#page=11"
+      }
+    ],
+    "d1483-summary": [
+      {
+        "document_sha256": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4",
+        "filename": "doh-14-83.pdf",
+        "page": 4,
+        "relevance": 3,
+        "evidence_id": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4#page=4"
+      },
+      {
+        "document_sha256": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4",
+        "filename": "doh-14-83.pdf",
+        "page": 6,
+        "relevance": 2,
+        "evidence_id": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4#page=6"
+      },
+      {
+        "document_sha256": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4",
+        "filename": "doh-14-83.pdf",
+        "page": 7,
+        "relevance": 2,
+        "evidence_id": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4#page=7"
+      },
+      {
+        "document_sha256": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4",
+        "filename": "doh-14-83.pdf",
+        "page": 10,
+        "relevance": 2,
+        "evidence_id": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4#page=10"
+      },
+      {
+        "document_sha256": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4",
+        "filename": "doh-14-83.pdf",
+        "page": 11,
+        "relevance": 2,
+        "evidence_id": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4#page=11"
+      },
+      {
+        "document_sha256": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4",
+        "filename": "doh-14-83.pdf",
+        "page": 13,
+        "relevance": 2,
+        "evidence_id": "5c603a5ae8824ffb213524dd7b906a3c3c3b0ac843a4cf419d5483e4d1e6ebc4#page=13"
+      }
+    ],
+    "d1499-fact-indicators": [
+      {
+        "document_sha256": "cce4fc8c7136a74627364702f2849b71f9e418a628616b57ea3c6d642a01231e",
+        "filename": "doh-14-99.pdf",
+        "page": 4,
+        "relevance": 3,
+        "evidence_id": "cce4fc8c7136a74627364702f2849b71f9e418a628616b57ea3c6d642a01231e#page=4"
+      }
+    ],
+    "d1499-num-codes": [
+      {
+        "document_sha256": "cce4fc8c7136a74627364702f2849b71f9e418a628616b57ea3c6d642a01231e",
+        "filename": "doh-14-99.pdf",
+        "page": 4,
+        "relevance": 3,
+        "evidence_id": "cce4fc8c7136a74627364702f2849b71f9e418a628616b57ea3c6d642a01231e#page=4"
+      }
+    ],
+    "d1499-analysis-ewom": [
+      {
+        "document_sha256": "cce4fc8c7136a74627364702f2849b71f9e418a628616b57ea3c6d642a01231e",
+        "filename": "doh-14-99.pdf",
+        "page": 4,
+        "relevance": 3,
+        "evidence_id": "cce4fc8c7136a74627364702f2849b71f9e418a628616b57ea3c6d642a01231e#page=4"
+      },
+      {
+        "document_sha256": "cce4fc8c7136a74627364702f2849b71f9e418a628616b57ea3c6d642a01231e",
+        "filename": "doh-14-99.pdf",
+        "page": 5,
+        "relevance": 2,
+        "evidence_id": "cce4fc8c7136a74627364702f2849b71f9e418a628616b57ea3c6d642a01231e#page=5"
+      }
+    ],
+    "d14148-fact-km": [
+      {
+        "document_sha256": "8d786e72f89db9f3c3f38278df0cfe37311adc73d719a6fe3ac592fe2f19939f",
+        "filename": "doh-14-148.pdf",
+        "page": 4,
+        "relevance": 3,
+        "evidence_id": "8d786e72f89db9f3c3f38278df0cfe37311adc73d719a6fe3ac592fe2f19939f#page=4"
+      }
+    ],
+    "d14148-page-gender": [
+      {
+        "document_sha256": "8d786e72f89db9f3c3f38278df0cfe37311adc73d719a6fe3ac592fe2f19939f",
+        "filename": "doh-14-148.pdf",
+        "page": 4,
+        "relevance": 3,
+        "evidence_id": "8d786e72f89db9f3c3f38278df0cfe37311adc73d719a6fe3ac592fe2f19939f#page=4"
+      }
+    ],
+    "d14148-quote-explain": [
+      {
+        "document_sha256": "8d786e72f89db9f3c3f38278df0cfe37311adc73d719a6fe3ac592fe2f19939f",
+        "filename": "doh-14-148.pdf",
+        "page": 4,
+        "relevance": 3,
+        "evidence_id": "8d786e72f89db9f3c3f38278df0cfe37311adc73d719a6fe3ac592fe2f19939f#page=4"
+      },
+      {
+        "document_sha256": "8d786e72f89db9f3c3f38278df0cfe37311adc73d719a6fe3ac592fe2f19939f",
+        "filename": "doh-14-148.pdf",
+        "page": 10,
+        "relevance": 2,
+        "evidence_id": "8d786e72f89db9f3c3f38278df0cfe37311adc73d719a6fe3ac592fe2f19939f#page=10"
+      }
+    ],
+    "d16334-fact-options": [
+      {
+        "document_sha256": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd",
+        "filename": "doh-16-334.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd#page=1"
+      },
+      {
+        "document_sha256": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd",
+        "filename": "doh-16-334.pdf",
+        "page": 8,
+        "relevance": 2,
+        "evidence_id": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd#page=8"
+      },
+      {
+        "document_sha256": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd",
+        "filename": "doh-16-334.pdf",
+        "page": 9,
+        "relevance": 2,
+        "evidence_id": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd#page=9"
+      }
+    ],
+    "d16334-cross": [
+      {
+        "document_sha256": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd",
+        "filename": "doh-16-334.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd#page=1"
+      },
+      {
+        "document_sha256": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd",
+        "filename": "doh-16-334.pdf",
+        "page": 4,
+        "relevance": 2,
+        "evidence_id": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd#page=4"
+      }
+    ],
+    "d16334-summary": [
+      {
+        "document_sha256": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd",
+        "filename": "doh-16-334.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd#page=1"
+      },
+      {
+        "document_sha256": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd",
+        "filename": "doh-16-334.pdf",
+        "page": 4,
+        "relevance": 2,
+        "evidence_id": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd#page=4"
+      },
+      {
+        "document_sha256": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd",
+        "filename": "doh-16-334.pdf",
+        "page": 6,
+        "relevance": 2,
+        "evidence_id": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd#page=6"
+      },
+      {
+        "document_sha256": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd",
+        "filename": "doh-16-334.pdf",
+        "page": 7,
+        "relevance": 2,
+        "evidence_id": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd#page=7"
+      },
+      {
+        "document_sha256": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd",
+        "filename": "doh-16-334.pdf",
+        "page": 8,
+        "relevance": 2,
+        "evidence_id": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd#page=8"
+      },
+      {
+        "document_sha256": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd",
+        "filename": "doh-16-334.pdf",
+        "page": 10,
+        "relevance": 2,
+        "evidence_id": "19e0fc2ffbc8995ef0ca99d88af7cac3138edbc59285a1149ba9da673d8836fd#page=10"
+      }
+    ],
+    "d16345-fact-institutions": [
+      {
+        "document_sha256": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867",
+        "filename": "doh-16-345.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867#page=1"
+      }
+    ],
+    "d16345-analysis-fragment": [
+      {
+        "document_sha256": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867",
+        "filename": "doh-16-345.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867#page=1"
+      },
+      {
+        "document_sha256": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867",
+        "filename": "doh-16-345.pdf",
+        "page": 10,
+        "relevance": 2,
+        "evidence_id": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867#page=10"
+      },
+      {
+        "document_sha256": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867",
+        "filename": "doh-16-345.pdf",
+        "page": 13,
+        "relevance": 2,
+        "evidence_id": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867#page=13"
+      }
+    ],
+    "d16345-summary": [
+      {
+        "document_sha256": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867",
+        "filename": "doh-16-345.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867#page=1"
+      },
+      {
+        "document_sha256": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867",
+        "filename": "doh-16-345.pdf",
+        "page": 4,
+        "relevance": 2,
+        "evidence_id": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867#page=4"
+      },
+      {
+        "document_sha256": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867",
+        "filename": "doh-16-345.pdf",
+        "page": 6,
+        "relevance": 2,
+        "evidence_id": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867#page=6"
+      },
+      {
+        "document_sha256": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867",
+        "filename": "doh-16-345.pdf",
+        "page": 9,
+        "relevance": 2,
+        "evidence_id": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867#page=9"
+      },
+      {
+        "document_sha256": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867",
+        "filename": "doh-16-345.pdf",
+        "page": 11,
+        "relevance": 2,
+        "evidence_id": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867#page=11"
+      },
+      {
+        "document_sha256": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867",
+        "filename": "doh-16-345.pdf",
+        "page": 13,
+        "relevance": 2,
+        "evidence_id": "5f32cec19028cf72aced9804a191a92be2ffe0d5d0ddaa6961966429d64ec867#page=13"
+      }
+    ],
+    "d16381-table4": [
+      {
+        "document_sha256": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e",
+        "filename": "doh-16-381.pdf",
+        "page": 9,
+        "relevance": 3,
+        "evidence_id": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e#page=9"
+      }
+    ],
+    "d16381-fact-economic": [
+      {
+        "document_sha256": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e",
+        "filename": "doh-16-381.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e#page=1"
+      },
+      {
+        "document_sha256": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e",
+        "filename": "doh-16-381.pdf",
+        "page": 8,
+        "relevance": 2,
+        "evidence_id": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e#page=8"
+      }
+    ],
+    "d16381-summary": [
+      {
+        "document_sha256": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e",
+        "filename": "doh-16-381.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e#page=1"
+      },
+      {
+        "document_sha256": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e",
+        "filename": "doh-16-381.pdf",
+        "page": 5,
+        "relevance": 2,
+        "evidence_id": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e#page=5"
+      },
+      {
+        "document_sha256": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e",
+        "filename": "doh-16-381.pdf",
+        "page": 7,
+        "relevance": 2,
+        "evidence_id": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e#page=7"
+      },
+      {
+        "document_sha256": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e",
+        "filename": "doh-16-381.pdf",
+        "page": 8,
+        "relevance": 2,
+        "evidence_id": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e#page=8"
+      },
+      {
+        "document_sha256": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e",
+        "filename": "doh-16-381.pdf",
+        "page": 9,
+        "relevance": 2,
+        "evidence_id": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e#page=9"
+      },
+      {
+        "document_sha256": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e",
+        "filename": "doh-16-381.pdf",
+        "page": 11,
+        "relevance": 2,
+        "evidence_id": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e#page=11"
+      },
+      {
+        "document_sha256": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e",
+        "filename": "doh-16-381.pdf",
+        "page": 12,
+        "relevance": 2,
+        "evidence_id": "fe90e8354efdd2333840c25d7b0210a89bd550cf736ba83f54d747ee30b3375e#page=12"
+      }
+    ],
+    "d16395-num-method": [
+      {
+        "document_sha256": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a",
+        "filename": "doh-16-395.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a#page=1"
+      },
+      {
+        "document_sha256": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a",
+        "filename": "doh-16-395.pdf",
+        "page": 6,
+        "relevance": 2,
+        "evidence_id": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a#page=6"
+      },
+      {
+        "document_sha256": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a",
+        "filename": "doh-16-395.pdf",
+        "page": 7,
+        "relevance": 2,
+        "evidence_id": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a#page=7"
+      }
+    ],
+    "d16395-analysis-synergy": [
+      {
+        "document_sha256": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a",
+        "filename": "doh-16-395.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a#page=1"
+      },
+      {
+        "document_sha256": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a",
+        "filename": "doh-16-395.pdf",
+        "page": 10,
+        "relevance": 2,
+        "evidence_id": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a#page=10"
+      },
+      {
+        "document_sha256": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a",
+        "filename": "doh-16-395.pdf",
+        "page": 12,
+        "relevance": 2,
+        "evidence_id": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a#page=12"
+      },
+      {
+        "document_sha256": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a",
+        "filename": "doh-16-395.pdf",
+        "page": 13,
+        "relevance": 2,
+        "evidence_id": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a#page=13"
+      }
+    ],
+    "d16395-summary": [
+      {
+        "document_sha256": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a",
+        "filename": "doh-16-395.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a#page=1"
+      },
+      {
+        "document_sha256": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a",
+        "filename": "doh-16-395.pdf",
+        "page": 4,
+        "relevance": 2,
+        "evidence_id": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a#page=4"
+      },
+      {
+        "document_sha256": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a",
+        "filename": "doh-16-395.pdf",
+        "page": 6,
+        "relevance": 2,
+        "evidence_id": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a#page=6"
+      },
+      {
+        "document_sha256": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a",
+        "filename": "doh-16-395.pdf",
+        "page": 8,
+        "relevance": 2,
+        "evidence_id": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a#page=8"
+      },
+      {
+        "document_sha256": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a",
+        "filename": "doh-16-395.pdf",
+        "page": 10,
+        "relevance": 2,
+        "evidence_id": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a#page=10"
+      },
+      {
+        "document_sha256": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a",
+        "filename": "doh-16-395.pdf",
+        "page": 12,
+        "relevance": 2,
+        "evidence_id": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a#page=12"
+      },
+      {
+        "document_sha256": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a",
+        "filename": "doh-16-395.pdf",
+        "page": 13,
+        "relevance": 2,
+        "evidence_id": "02a5ec3e5fe7ee5124a2c260dc194ddf9e7521be0500f81d79005f28badda83a#page=13"
+      }
+    ],
+    "d16423-fact-sample": [
+      {
+        "document_sha256": "91b3a521e188af84aafafcf625f4417b377631a6f67b62c24420b0f774ab4075",
+        "filename": "doh-16-423.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "91b3a521e188af84aafafcf625f4417b377631a6f67b62c24420b0f774ab4075#page=1"
+      }
+    ],
+    "d16423-num-codes": [
+      {
+        "document_sha256": "91b3a521e188af84aafafcf625f4417b377631a6f67b62c24420b0f774ab4075",
+        "filename": "doh-16-423.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "91b3a521e188af84aafafcf625f4417b377631a6f67b62c24420b0f774ab4075#page=1"
+      },
+      {
+        "document_sha256": "91b3a521e188af84aafafcf625f4417b377631a6f67b62c24420b0f774ab4075",
+        "filename": "doh-16-423.pdf",
+        "page": 6,
+        "relevance": 2,
+        "evidence_id": "91b3a521e188af84aafafcf625f4417b377631a6f67b62c24420b0f774ab4075#page=6"
+      }
+    ],
+    "d16423-page-themes": [
+      {
+        "document_sha256": "91b3a521e188af84aafafcf625f4417b377631a6f67b62c24420b0f774ab4075",
+        "filename": "doh-16-423.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "91b3a521e188af84aafafcf625f4417b377631a6f67b62c24420b0f774ab4075#page=1"
+      }
+    ],
+    "d16434-num-variance": [
+      {
+        "document_sha256": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b",
+        "filename": "doh-16-434.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b#page=1"
+      },
+      {
+        "document_sha256": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b",
+        "filename": "doh-16-434.pdf",
+        "page": 3,
+        "relevance": 2,
+        "evidence_id": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b#page=3"
+      },
+      {
+        "document_sha256": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b",
+        "filename": "doh-16-434.pdf",
+        "page": 10,
+        "relevance": 2,
+        "evidence_id": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b#page=10"
+      }
+    ],
+    "d16434-analysis-mediator": [
+      {
+        "document_sha256": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b",
+        "filename": "doh-16-434.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b#page=1"
+      },
+      {
+        "document_sha256": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b",
+        "filename": "doh-16-434.pdf",
+        "page": 10,
+        "relevance": 2,
+        "evidence_id": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b#page=10"
+      },
+      {
+        "document_sha256": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b",
+        "filename": "doh-16-434.pdf",
+        "page": 11,
+        "relevance": 2,
+        "evidence_id": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b#page=11"
+      },
+      {
+        "document_sha256": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b",
+        "filename": "doh-16-434.pdf",
+        "page": 13,
+        "relevance": 2,
+        "evidence_id": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b#page=13"
+      }
+    ],
+    "d16434-summary": [
+      {
+        "document_sha256": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b",
+        "filename": "doh-16-434.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b#page=1"
+      },
+      {
+        "document_sha256": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b",
+        "filename": "doh-16-434.pdf",
+        "page": 4,
+        "relevance": 2,
+        "evidence_id": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b#page=4"
+      },
+      {
+        "document_sha256": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b",
+        "filename": "doh-16-434.pdf",
+        "page": 7,
+        "relevance": 2,
+        "evidence_id": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b#page=7"
+      },
+      {
+        "document_sha256": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b",
+        "filename": "doh-16-434.pdf",
+        "page": 9,
+        "relevance": 2,
+        "evidence_id": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b#page=9"
+      },
+      {
+        "document_sha256": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b",
+        "filename": "doh-16-434.pdf",
+        "page": 10,
+        "relevance": 2,
+        "evidence_id": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b#page=10"
+      },
+      {
+        "document_sha256": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b",
+        "filename": "doh-16-434.pdf",
+        "page": 11,
+        "relevance": 2,
+        "evidence_id": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b#page=11"
+      },
+      {
+        "document_sha256": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b",
+        "filename": "doh-16-434.pdf",
+        "page": 13,
+        "relevance": 2,
+        "evidence_id": "bdbdd272f6a46b83ad35ef77a61709ba4e67ad5f8c851fcc75df6caf5ba0f18b#page=13"
+      }
+    ],
+    "d16450-fact-west": [
+      {
+        "document_sha256": "513af4f03af21473dd853e4025445e789ddd9b1339d5d46b5d6725384ec822b1",
+        "filename": "doh-16-450.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "513af4f03af21473dd853e4025445e789ddd9b1339d5d46b5d6725384ec822b1#page=1"
+      }
+    ],
+    "d16450-page-invites": [
+      {
+        "document_sha256": "513af4f03af21473dd853e4025445e789ddd9b1339d5d46b5d6725384ec822b1",
+        "filename": "doh-16-450.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "513af4f03af21473dd853e4025445e789ddd9b1339d5d46b5d6725384ec822b1#page=1"
+      }
+    ],
+    "d16450-analysis-dual": [
+      {
+        "document_sha256": "513af4f03af21473dd853e4025445e789ddd9b1339d5d46b5d6725384ec822b1",
+        "filename": "doh-16-450.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "513af4f03af21473dd853e4025445e789ddd9b1339d5d46b5d6725384ec822b1#page=1"
+      },
+      {
+        "document_sha256": "513af4f03af21473dd853e4025445e789ddd9b1339d5d46b5d6725384ec822b1",
+        "filename": "doh-16-450.pdf",
+        "page": 3,
+        "relevance": 2,
+        "evidence_id": "513af4f03af21473dd853e4025445e789ddd9b1339d5d46b5d6725384ec822b1#page=3"
+      },
+      {
+        "document_sha256": "513af4f03af21473dd853e4025445e789ddd9b1339d5d46b5d6725384ec822b1",
+        "filename": "doh-16-450.pdf",
+        "page": 6,
+        "relevance": 2,
+        "evidence_id": "513af4f03af21473dd853e4025445e789ddd9b1339d5d46b5d6725384ec822b1#page=6"
+      }
+    ],
+    "d16456-fact-recs": [
+      {
+        "document_sha256": "814c5969d31ae2677e539b336433ffc5b9c18c391caf84ed107123bb609b6358",
+        "filename": "doh-16-456.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "814c5969d31ae2677e539b336433ffc5b9c18c391caf84ed107123bb609b6358#page=1"
+      }
+    ],
+    "d16456-cross": [
+      {
+        "document_sha256": "814c5969d31ae2677e539b336433ffc5b9c18c391caf84ed107123bb609b6358",
+        "filename": "doh-16-456.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "814c5969d31ae2677e539b336433ffc5b9c18c391caf84ed107123bb609b6358#page=1"
+      },
+      {
+        "document_sha256": "814c5969d31ae2677e539b336433ffc5b9c18c391caf84ed107123bb609b6358",
+        "filename": "doh-16-456.pdf",
+        "page": 4,
+        "relevance": 2,
+        "evidence_id": "814c5969d31ae2677e539b336433ffc5b9c18c391caf84ed107123bb609b6358#page=4"
+      }
+    ],
+    "d16456-analysis-coordination": [
+      {
+        "document_sha256": "814c5969d31ae2677e539b336433ffc5b9c18c391caf84ed107123bb609b6358",
+        "filename": "doh-16-456.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "814c5969d31ae2677e539b336433ffc5b9c18c391caf84ed107123bb609b6358#page=1"
+      },
+      {
+        "document_sha256": "814c5969d31ae2677e539b336433ffc5b9c18c391caf84ed107123bb609b6358",
+        "filename": "doh-16-456.pdf",
+        "page": 4,
+        "relevance": 2,
+        "evidence_id": "814c5969d31ae2677e539b336433ffc5b9c18c391caf84ed107123bb609b6358#page=4"
+      },
+      {
+        "document_sha256": "814c5969d31ae2677e539b336433ffc5b9c18c391caf84ed107123bb609b6358",
+        "filename": "doh-16-456.pdf",
+        "page": 18,
+        "relevance": 2,
+        "evidence_id": "814c5969d31ae2677e539b336433ffc5b9c18c391caf84ed107123bb609b6358#page=18"
+      }
+    ],
+    "fx001-conflict": [
+      {
+        "document_sha256": "b49470cca6231108f93b7806117812c05c22fc72e340e723e52e80bd51e97794",
+        "filename": "fixture-001-conflicting-retention-policy.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "b49470cca6231108f93b7806117812c05c22fc72e340e723e52e80bd51e97794#page=1"
+      },
+      {
+        "document_sha256": "b49470cca6231108f93b7806117812c05c22fc72e340e723e52e80bd51e97794",
+        "filename": "fixture-001-conflicting-retention-policy.pdf",
+        "page": 2,
+        "relevance": 2,
+        "evidence_id": "b49470cca6231108f93b7806117812c05c22fc72e340e723e52e80bd51e97794#page=2"
+      },
+      {
+        "document_sha256": "b49470cca6231108f93b7806117812c05c22fc72e340e723e52e80bd51e97794",
+        "filename": "fixture-001-conflicting-retention-policy.pdf",
+        "page": 3,
+        "relevance": 2,
+        "evidence_id": "b49470cca6231108f93b7806117812c05c22fc72e340e723e52e80bd51e97794#page=3"
+      }
+    ],
+    "fx001-page-legal": [
+      {
+        "document_sha256": "b49470cca6231108f93b7806117812c05c22fc72e340e723e52e80bd51e97794",
+        "filename": "fixture-001-conflicting-retention-policy.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "b49470cca6231108f93b7806117812c05c22fc72e340e723e52e80bd51e97794#page=1"
+      }
+    ],
+    "fx001-noanswer-precedence": [
+      {
+        "document_sha256": "b49470cca6231108f93b7806117812c05c22fc72e340e723e52e80bd51e97794",
+        "filename": "fixture-001-conflicting-retention-policy.pdf",
+        "page": 3,
+        "relevance": 3,
+        "evidence_id": "b49470cca6231108f93b7806117812c05c22fc72e340e723e52e80bd51e97794#page=3"
+      }
+    ],
+    "fx001-quote": [
+      {
+        "document_sha256": "b49470cca6231108f93b7806117812c05c22fc72e340e723e52e80bd51e97794",
+        "filename": "fixture-001-conflicting-retention-policy.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "b49470cca6231108f93b7806117812c05c22fc72e340e723e52e80bd51e97794#page=1"
+      },
+      {
+        "document_sha256": "b49470cca6231108f93b7806117812c05c22fc72e340e723e52e80bd51e97794",
+        "filename": "fixture-001-conflicting-retention-policy.pdf",
+        "page": 2,
+        "relevance": 2,
+        "evidence_id": "b49470cca6231108f93b7806117812c05c22fc72e340e723e52e80bd51e97794#page=2"
+      },
+      {
+        "document_sha256": "b49470cca6231108f93b7806117812c05c22fc72e340e723e52e80bd51e97794",
+        "filename": "fixture-001-conflicting-retention-policy.pdf",
+        "page": 3,
+        "relevance": 2,
+        "evidence_id": "b49470cca6231108f93b7806117812c05c22fc72e340e723e52e80bd51e97794#page=3"
+      }
+    ],
+    "fx002-fact-sla": [
+      {
+        "document_sha256": "32b29809fedfc94fa7a65b55891c276a5f07e948308321f8dbc8d6698c1539fa",
+        "filename": "fixture-002-repeated-header-footer.pdf",
+        "page": 2,
+        "relevance": 3,
+        "evidence_id": "32b29809fedfc94fa7a65b55891c276a5f07e948308321f8dbc8d6698c1539fa#page=2"
+      }
+    ],
+    "fx002-page-escalate": [
+      {
+        "document_sha256": "32b29809fedfc94fa7a65b55891c276a5f07e948308321f8dbc8d6698c1539fa",
+        "filename": "fixture-002-repeated-header-footer.pdf",
+        "page": 3,
+        "relevance": 3,
+        "evidence_id": "32b29809fedfc94fa7a65b55891c276a5f07e948308321f8dbc8d6698c1539fa#page=3"
+      }
+    ],
+    "fx002-noanswer-resolution": [
+      {
+        "document_sha256": "32b29809fedfc94fa7a65b55891c276a5f07e948308321f8dbc8d6698c1539fa",
+        "filename": "fixture-002-repeated-header-footer.pdf",
+        "page": 2,
+        "relevance": 3,
+        "evidence_id": "32b29809fedfc94fa7a65b55891c276a5f07e948308321f8dbc8d6698c1539fa#page=2"
+      }
+    ],
+    "fx002-quote": [
+      {
+        "document_sha256": "32b29809fedfc94fa7a65b55891c276a5f07e948308321f8dbc8d6698c1539fa",
+        "filename": "fixture-002-repeated-header-footer.pdf",
+        "page": 2,
+        "relevance": 3,
+        "evidence_id": "32b29809fedfc94fa7a65b55891c276a5f07e948308321f8dbc8d6698c1539fa#page=2"
+      }
+    ],
+    "fx003-cross-threshold": [
+      {
+        "document_sha256": "129cbecab88119efbd1e5c83677e75e9016072821e35aabbfedf32731531bde9",
+        "filename": "fixture-003-mixed-persian-english.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "129cbecab88119efbd1e5c83677e75e9016072821e35aabbfedf32731531bde9#page=1"
+      }
+    ],
+    "fx003-fact-rollback": [
+      {
+        "document_sha256": "129cbecab88119efbd1e5c83677e75e9016072821e35aabbfedf32731531bde9",
+        "filename": "fixture-003-mixed-persian-english.pdf",
+        "page": 2,
+        "relevance": 3,
+        "evidence_id": "129cbecab88119efbd1e5c83677e75e9016072821e35aabbfedf32731531bde9#page=2"
+      }
+    ],
+    "fx003-page-audit": [
+      {
+        "document_sha256": "129cbecab88119efbd1e5c83677e75e9016072821e35aabbfedf32731531bde9",
+        "filename": "fixture-003-mixed-persian-english.pdf",
+        "page": 3,
+        "relevance": 3,
+        "evidence_id": "129cbecab88119efbd1e5c83677e75e9016072821e35aabbfedf32731531bde9#page=3"
+      }
+    ],
+    "fx003-quote": [
+      {
+        "document_sha256": "129cbecab88119efbd1e5c83677e75e9016072821e35aabbfedf32731531bde9",
+        "filename": "fixture-003-mixed-persian-english.pdf",
+        "page": 2,
+        "relevance": 3,
+        "evidence_id": "129cbecab88119efbd1e5c83677e75e9016072821e35aabbfedf32731531bde9#page=2"
+      }
+    ],
+    "fx004-fact-leave": [
+      {
+        "document_sha256": "c7eb0ba5e869a3401d19b0663d1713474ecd141e8a770500d5a97815129f3eb3",
+        "filename": "fixture-004-intentional-no-answer.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "c7eb0ba5e869a3401d19b0663d1713474ecd141e8a770500d5a97815129f3eb3#page=1"
+      }
+    ],
+    "fx004-page-request": [
+      {
+        "document_sha256": "c7eb0ba5e869a3401d19b0663d1713474ecd141e8a770500d5a97815129f3eb3",
+        "filename": "fixture-004-intentional-no-answer.pdf",
+        "page": 2,
+        "relevance": 3,
+        "evidence_id": "c7eb0ba5e869a3401d19b0663d1713474ecd141e8a770500d5a97815129f3eb3#page=2"
+      }
+    ],
+    "fx004-noanswer-overtime": [
+      {
+        "document_sha256": "c7eb0ba5e869a3401d19b0663d1713474ecd141e8a770500d5a97815129f3eb3",
+        "filename": "fixture-004-intentional-no-answer.pdf",
+        "page": 3,
+        "relevance": 3,
+        "evidence_id": "c7eb0ba5e869a3401d19b0663d1713474ecd141e8a770500d5a97815129f3eb3#page=3"
+      }
+    ],
+    "fx004-cross": [
+      {
+        "document_sha256": "c7eb0ba5e869a3401d19b0663d1713474ecd141e8a770500d5a97815129f3eb3",
+        "filename": "fixture-004-intentional-no-answer.pdf",
+        "page": 3,
+        "relevance": 3,
+        "evidence_id": "c7eb0ba5e869a3401d19b0663d1713474ecd141e8a770500d5a97815129f3eb3#page=3"
+      }
+    ],
+    "fx005-fact-alpha": [
+      {
+        "document_sha256": "e52d1599130fc29fea22565d5576c43e56d1cc0315d3c10a789ab40632a83963",
+        "filename": "fixture-005-ambiguous-followup.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "e52d1599130fc29fea22565d5576c43e56d1cc0315d3c10a789ab40632a83963#page=1"
+      }
+    ],
+    "fx005-fact-beta": [
+      {
+        "document_sha256": "e52d1599130fc29fea22565d5576c43e56d1cc0315d3c10a789ab40632a83963",
+        "filename": "fixture-005-ambiguous-followup.pdf",
+        "page": 2,
+        "relevance": 3,
+        "evidence_id": "e52d1599130fc29fea22565d5576c43e56d1cc0315d3c10a789ab40632a83963#page=2"
+      }
+    ],
+    "fx005-ambiguous": [
+      {
+        "document_sha256": "e52d1599130fc29fea22565d5576c43e56d1cc0315d3c10a789ab40632a83963",
+        "filename": "fixture-005-ambiguous-followup.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "e52d1599130fc29fea22565d5576c43e56d1cc0315d3c10a789ab40632a83963#page=1"
+      },
+      {
+        "document_sha256": "e52d1599130fc29fea22565d5576c43e56d1cc0315d3c10a789ab40632a83963",
+        "filename": "fixture-005-ambiguous-followup.pdf",
+        "page": 2,
+        "relevance": 2,
+        "evidence_id": "e52d1599130fc29fea22565d5576c43e56d1cc0315d3c10a789ab40632a83963#page=2"
+      },
+      {
+        "document_sha256": "e52d1599130fc29fea22565d5576c43e56d1cc0315d3c10a789ab40632a83963",
+        "filename": "fixture-005-ambiguous-followup.pdf",
+        "page": 3,
+        "relevance": 2,
+        "evidence_id": "e52d1599130fc29fea22565d5576c43e56d1cc0315d3c10a789ab40632a83963#page=3"
+      }
+    ],
+    "fx005-cross": [
+      {
+        "document_sha256": "e52d1599130fc29fea22565d5576c43e56d1cc0315d3c10a789ab40632a83963",
+        "filename": "fixture-005-ambiguous-followup.pdf",
+        "page": 1,
+        "relevance": 3,
+        "evidence_id": "e52d1599130fc29fea22565d5576c43e56d1cc0315d3c10a789ab40632a83963#page=1"
+      },
+      {
+        "document_sha256": "e52d1599130fc29fea22565d5576c43e56d1cc0315d3c10a789ab40632a83963",
+        "filename": "fixture-005-ambiguous-followup.pdf",
+        "page": 2,
+        "relevance": 2,
+        "evidence_id": "e52d1599130fc29fea22565d5576c43e56d1cc0315d3c10a789ab40632a83963#page=2"
+      }
+    ]
+  }
+}

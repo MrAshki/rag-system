@@ -30,10 +30,17 @@ export function SourceModal({
 
   return (
     <div className={styles.modalBackdrop} onClick={onClose}>
-      <div className={styles.modal} onClick={(event) => event.stopPropagation()}>
+      <div
+        aria-labelledby="source-modal-title"
+        aria-modal="true"
+        className={styles.modal}
+        data-testid="source-modal"
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+      >
         <div className={styles.modalHead}>
           <div>
-            <h2>انتخاب منابع چت</h2>
+            <h2 id="source-modal-title">انتخاب منابع چت</h2>
             <p>فقط فایل‌های متنی پردازش‌شده به مدل پاس داده می‌شوند.</p>
           </div>
           <button onClick={onClose} type="button"><AppIcon name="x" /></button>
@@ -59,7 +66,11 @@ export function SourceModal({
                 {rows.length ? rows.map((asset) => {
                   const selectable = assetIsSelectable(asset);
                   return (
-                    <label className={`${styles.assetRow} ${selectable ? "" : styles.disabledAsset}`} key={asset.id}>
+                    <label
+                      className={`${styles.assetRow} ${selectable ? "" : styles.disabledAsset}`}
+                      data-asset-id={asset.id}
+                      key={asset.id}
+                    >
                       <input type="checkbox" disabled={!selectable} checked={selectedAssetIds.has(asset.id)} onChange={(event) => onToggleAsset(asset, event.target.checked)} />
                       <span>{assetName(asset)}</span>
                       <small>{selectable ? "آماده" : category === "text" ? statusLabel(asset.status) : "به‌زودی"}</small>

@@ -1,7 +1,7 @@
 """LLM-assisted structure relabeling (Step 2.5).
 
 Takes the blocks already produced by ingest.py's deterministic tokenizer and
-asks a local Ollama model to RELABEL them -- never to rewrite, translate,
+asks a configured chat provider to RELABEL them -- never to rewrite, translate,
 summarize, or regenerate their text. The model only ever sees a numbered list
 of block/unit previews and returns {"index": int, "label": str} pairs; our
 code always splices the ORIGINAL, untouched text back in using whichever
@@ -15,7 +15,7 @@ import json
 import re
 from typing import Dict, List, Optional, Tuple
 
-import ollama
+from model_gateway import get_chat_provider
 
 LABELS = (
     "title", "heading_1", "heading_2", "heading_3", "paragraph",
@@ -161,13 +161,30 @@ def build_prompt(units: List[Dict], start_index: int, end_index: int, heading_st
     return SYSTEM_PROMPT + "\n\n" + "\n".join(lines)
 
 
-def call_ollama(prompt: str, model: str, num_ctx: int) -> str:
-    resp = ollama.chat(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
+def call_llm(prompt: str, provider: str, model: str, num_ctx: int) -> str:
+    chat_provider = get_chat_provider(provider=provider, model=model, feature="document_normalization")
+    return chat_provider.chat(
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
         options={"temperature": 0, "num_ctx": num_ctx},
+        response_format="json",
     )
-    return resp["message"]["content"]
+
+
+def call_ollama(prompt: str, model: str, num_ctx: int) -> str:
+    return call_llm(prompt, "ollama", model, num_ctx)
+
+
+def call_model(prompt: str, provider: str, model: str, num_ctx: int) -> str:
+    if provider == "ollama":
+        return call_ollama(prompt, model, num_ctx)
+    return call_llm(prompt, provider, model, num_ctx)
+
+
+def _classification_prompt(units: List[Dict], start_index: int, end_index: int, heading_stack: Dict[str, Optional[str]]) -> str:
+    return build_prompt(units, start_index, end_index, heading_stack).removeprefix(SYSTEM_PROMPT).strip()
 
 
 def parse_and_validate_response(raw: str, start_index: int, end_index: int) -> Tuple[Optional[Dict[int, str]], Optional[str]]:
@@ -214,8 +231,9 @@ def classify_document(
     num_ctx: int,
     max_batches: int = 20,
     force: bool = False,
+    provider: str = "ollama",
 ) -> Tuple[List[Tuple], Dict]:
-    """Orchestrates: explode -> batch -> call Ollama per batch (sequentially,
+    """Orchestrates: explode -> batch -> call the configured LLM per batch (sequentially,
     carrying heading context forward) -> validate -> per-batch fallback ->
     reassemble. Returns (new_blocks, info). info["used"] is False (blocks
     returned unchanged) if there's nothing to classify or the estimated batch
@@ -240,12 +258,12 @@ def classify_document(
     heading_stack: Dict[str, Optional[str]] = {"heading_1": None, "heading_2": None, "heading_3": None}
 
     for batch_idx, (start, end) in enumerate(batches):
-        prompt = build_prompt(units, start, end, heading_stack)
+        prompt = _classification_prompt(units, start, end, heading_stack)
         try:
-            raw = call_ollama(prompt, model, num_ctx)
+            raw = call_model(prompt, provider, model, num_ctx)
         except Exception as ex:
             raw = ""
-            warnings.append(f"batch {batch_idx} [{start}:{end}]: Ollama call failed ({ex}); fell back to deterministic labels")
+            warnings.append(f"batch {batch_idx} [{start}:{end}]: {provider} call failed ({ex}); fell back to deterministic labels")
             fallback_count += 1
             for i in range(start, end):
                 final_labels[i] = units[i]["orig_label"]

@@ -61,6 +61,7 @@ class ComputeUsageTrackingTest(unittest.TestCase):
                 feature="exam_generation",
             ),
             patch.object(rag, "ENABLE_RERANKER", True),
+            patch.object(rag, "RERANKER_PROVIDER", "local"),
             patch.object(rag, "_get_reranker", return_value=FakeReranker()),
             patch.object(rag, "record_compute_usage_event") as record_compute,
             patch.object(rag, "record_usage_event", create=True) as record_llm,

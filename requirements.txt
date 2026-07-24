@@ -10,10 +10,12 @@ psycopg==3.3.4
 SQLAlchemy==2.0.45
 alembic==1.17.2
 pgvector==0.4.1
+qdrant-client>=1.11.0
 
 # RAG core
 sentence-transformers==5.6.0
 ollama==0.6.2
+langgraph==1.2.9
 
 # Document parsing
 pypdf==6.13.3
@@ -34,6 +36,9 @@ Pillow==12.2.0
 # Payments / misc
 requests==2.34.2
 python-dotenv==1.2.2
+
+# Testing
+pytest==9.1.1
 
 # NOTE: PyTorch is installed separately because the CUDA build is not on PyPI.
 # For GPU (recommended), install the CUDA wheel matching your GPU/driver, e.g.:

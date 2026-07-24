@@ -77,6 +77,11 @@ def metadata_path(user_id, category: str, asset_id: str) -> str:
     return os.path.join(asset_dir(user_id, category, asset_id), "metadata.json")
 
 
+def document_map_path(user_id, category: str, asset_id: str) -> str:
+    """Path to the stable parent-unit map consumed by agentic RAG."""
+    return os.path.join(asset_dir(user_id, category, asset_id), "document_map.json")
+
+
 def ocr_dir(user_id, category: str, asset_id: str, create: bool = False) -> str:
     """Folder for OCR image-processing artifacts (rendered page PNGs). Kept in a
     SEPARATE subfolder from the normalize pipeline's normalized.md/metadata.json:

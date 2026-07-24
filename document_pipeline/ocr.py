@@ -21,7 +21,11 @@ import os
 import shutil
 from typing import Dict, Iterable, Tuple
 
-OCR_LANG = os.getenv("OCR_LANG", "fas")
+from dotenv import load_dotenv
+
+load_dotenv(override=True, encoding="utf-8-sig")
+
+OCR_LANG = os.getenv("OCR_LANG", "fas+eng")
 OCR_DPI = int(os.getenv("OCR_DPI", "300"))  # 300 DPI is the sweet spot for print OCR
 
 
@@ -56,8 +60,10 @@ def availability(lang: str = OCR_LANG) -> Tuple[bool, str]:
         langs = pt.get_languages(config="")
     except Exception as e:  # noqa: BLE001
         return False, f"اجرای Tesseract ناموفق بود ({e})"
-    if lang not in langs:
-        return False, (f"بسته‌ی زبان «{lang}» در Tesseract نصب نیست "
+    requested_languages = [item.strip() for item in lang.split("+") if item.strip()]
+    missing_languages = [item for item in requested_languages if item not in langs]
+    if missing_languages:
+        return False, (f"بسته‌ی زبان «{'+'.join(missing_languages)}» در Tesseract نصب نیست "
                        f"(زبان‌های موجود: {', '.join(langs) or 'هیچ'})")
     return True, ""
 
