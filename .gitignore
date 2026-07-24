@@ -50,6 +50,8 @@ docs/*
 !docs/rag-quality-baseline.md
 !docs/rag-production-path-fixes.md
 !docs/rag-goal3-metric-optimization.md
+!docs/assets/
+!docs/assets/**
 
 # Per-user file store: originals + normalized markdown + metadata (runtime data).
 # Replaces the old flat docs/ + converted/ layout; regenerated from uploads.
