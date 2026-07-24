@@ -58,20 +58,56 @@ def build_grounded_messages(
     ]
 
 
-def _load_json(raw: str) -> dict[str, Any] | None:
+def load_json_object(raw: str) -> dict[str, Any] | None:
+    """Parse a provider JSON object through fenced, prefixed, or cut-off wrappers."""
     cleaned = FENCE_RE.sub("", (raw or "").strip()).strip()
-    try:
-        value = json.loads(cleaned)
-        return value if isinstance(value, dict) else None
-    except json.JSONDecodeError:
-        start, end = cleaned.find("{"), cleaned.rfind("}")
-        if start >= 0 and end > start:
-            try:
-                value = json.loads(cleaned[start:end + 1])
-                return value if isinstance(value, dict) else None
-            except json.JSONDecodeError:
+    candidates = [cleaned]
+    start = cleaned.find("{")
+    if start > 0:
+        candidates.append(cleaned[start:])
+    for candidate in candidates:
+        try:
+            value, _end = json.JSONDecoder().raw_decode(candidate)
+            return value if isinstance(value, dict) else None
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Bounded repair for provider truncation that omitted only final object or
+    # array delimiters. Never invent keys, values, or close a cut string.
+    candidate = cleaned[start:] if start >= 0 else ""
+    candidate = re.sub(r"\s*```$", "", candidate).strip()
+    in_string = False
+    escaped = False
+    stack: list[str] = []
+    for char in candidate:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char in "{[":
+            stack.append("}" if char == "{" else "]")
+        elif char in "}]" and stack:
+            if char != stack[-1]:
                 return None
+            stack.pop()
+    if candidate and not in_string and stack:
+        try:
+            value = json.loads(candidate + "".join(reversed(stack)))
+            return value if isinstance(value, dict) else None
+        except json.JSONDecodeError:
+            pass
     return None
+
+
+def _load_json(raw: str) -> dict[str, Any] | None:
+    """Backward-compatible alias for the shared structured-output parser."""
+    return load_json_object(raw)
 
 
 def grounded_contract_error(raw: str, *, evidence_count: int) -> str | None:
@@ -100,8 +136,6 @@ def grounded_contract_error(raw: str, *, evidence_count: int) -> str | None:
         if SOURCE_MARKER_RE.search(text):
             return "citation_marker_format_invalid"
         stripped = text.strip()
-        if len(stripped) >= 120 and re.search(r"[0-9A-Za-z\u0600-\u06ff]$", stripped):
-            return "truncated_output"
         if re.search(r"(?:\b(?:and|or|because|that|with)|(?:^|\s)(?:و|که|از|به|در))\s*$", stripped, re.IGNORECASE):
             return "truncated_output"
         if stripped.endswith(("-", "–", "—", ":")):
@@ -114,6 +148,54 @@ def grounded_contract_error(raw: str, *, evidence_count: int) -> str | None:
         if any(int(value[1:]) < 1 or int(value[1:]) > evidence_count for value in normalized):
             return "citation_marker_format_invalid"
     return None
+
+
+def repair_grounded_contract(raw: str, *, evidence_count: int) -> str | None:
+    """Apply one bounded local repair to citation-format-only defects.
+
+    The repair never invents text or evidence. It removes leaked inline
+    markers, normalizes valid E/S identifiers, de-duplicates them, and narrows
+    each paragraph to at most three existing evidence IDs.
+    """
+    payload = _load_json(raw)
+    if not payload or not isinstance(payload.get("answerable"), bool):
+        return None
+    paragraphs = payload.get("paragraphs")
+    if not isinstance(paragraphs, list):
+        return None
+    if payload["answerable"] is False:
+        if paragraphs:
+            return None
+        return json.dumps(payload, ensure_ascii=False)
+
+    repaired = []
+    for item in paragraphs[:12]:
+        if not isinstance(item, dict) or not isinstance(item.get("text"), str):
+            return None
+        text = _clean_paragraph(item["text"])
+        ids = []
+        for raw_id in item.get("evidence_ids") or []:
+            evidence_id = str(raw_id or "").upper().replace("S", "E", 1)
+            if (
+                re.fullmatch(r"E\d+", evidence_id)
+                and 1 <= int(evidence_id[1:]) <= evidence_count
+                and evidence_id not in ids
+            ):
+                ids.append(evidence_id)
+        if not text or not ids:
+            return None
+        repaired.append({"text": text, "evidence_ids": ids[:3]})
+    if not repaired:
+        return None
+    candidate = json.dumps(
+        {"answerable": True, "paragraphs": repaired},
+        ensure_ascii=False,
+    )
+    return (
+        candidate
+        if grounded_contract_error(candidate, evidence_count=evidence_count) is None
+        else None
+    )
 
 
 def _clean_paragraph(text: str) -> str:
@@ -140,6 +222,125 @@ def _numeric_anchors(text: str) -> set[str]:
     return set(re.findall(r"(?<!\w)[0-9]+(?:\.[0-9]+)?", normalized))
 
 
+def _claim_terms(text: str) -> set[str]:
+    stopwords = {
+        "است", "بود", "شد", "شده", "برای", "این", "آن", "در", "به", "از", "را", "که", "و", "با",
+        "the", "a", "an", "is", "was", "were", "of", "to", "in", "and", "for", "with",
+    }
+    return {
+        term
+        for term in re.findall(r"[A-Za-z\u0600-\u06ff]{3,}", (text or "").lower())
+        if term not in stopwords
+    }
+
+
+def _best_supporting_ids(
+    *,
+    text: str,
+    proposed_ids: list[str],
+    evidence: dict[str, dict[str, Any]],
+) -> tuple[list[str], str]:
+    """Narrow or repair a paragraph's evidence IDs inside the supplied context.
+
+    Numeric claims are treated as a small set-cover problem: every number must
+    occur on the finally cited page(s). This prevents a correct answer from
+    carrying broad unrelated citations while allowing a bounded same-context
+    repair when the provider chose the wrong evidence ID.
+    """
+    numbers = _numeric_anchors(text)
+    quotes = [value.strip() for value in re.findall(r"[«\"“]([^»\"”]{3,})[»\"”]", text)]
+    terms = _claim_terms(text)
+    candidates = []
+    proposed_scopes = {
+        str(evidence[evidence_id].get("coverage_key") or "")
+        for evidence_id in proposed_ids
+        if evidence_id in evidence and evidence[evidence_id].get("coverage_key")
+    }
+    for evidence_id, chunk in evidence.items():
+        chunk_text = str(chunk.get("text") or "")
+        chunk_numbers = _numeric_anchors(chunk_text)
+        covered_numbers = numbers & chunk_numbers
+        quote_hits = sum(value in chunk_text for value in quotes)
+        term_hits = len(terms & _claim_terms(chunk_text))
+        proposed = evidence_id in proposed_ids
+        if numbers and not covered_numbers:
+            continue
+        if quotes and not quote_hits and not covered_numbers:
+            continue
+        candidates.append({
+            "id": evidence_id,
+            "numbers": covered_numbers,
+            "quotes": quote_hits,
+            "terms": term_hits,
+            "proposed": proposed,
+            "scope_match": bool(
+                proposed_scopes
+                and str(chunk.get("coverage_key") or "") in proposed_scopes
+            ),
+            "page_width": max(
+                0,
+                int(chunk.get("page_end") or chunk.get("page") or 0)
+                - int(chunk.get("page") or 0),
+            ),
+        })
+
+    if not numbers:
+        scoped = [
+            item for item in candidates
+            if item["scope_match"] and not item["proposed"] and item["terms"]
+        ]
+        if scoped:
+            scoped.sort(
+                key=lambda item: (
+                    item["terms"],
+                    item["quotes"],
+                    -item["page_width"],
+                ),
+                reverse=True,
+            )
+            best_terms = scoped[0]["terms"]
+            selected = [
+                item["id"] for item in scoped
+                if item["terms"] == best_terms
+            ][:3]
+            return selected, "repaired"
+        retained = [
+            item["id"]
+            for item in candidates
+            if item["proposed"] and (item["terms"] or item["quotes"] or not terms)
+        ][:3]
+        return (retained or proposed_ids[:3]), "retained"
+
+    selected: list[str] = []
+    remaining = set(numbers)
+    while remaining and len(selected) < 3:
+        ranked = sorted(
+            candidates,
+            key=lambda item: (
+                len(item["numbers"] & remaining),
+                item["scope_match"],
+                item["proposed"],
+                item["terms"],
+                item["quotes"],
+                -item["page_width"],
+            ),
+            reverse=True,
+        )
+        if not ranked or not (ranked[0]["numbers"] & remaining):
+            break
+        chosen = ranked[0]
+        selected.append(chosen["id"])
+        remaining -= chosen["numbers"]
+        candidates = [item for item in candidates if item["id"] != chosen["id"]]
+    if remaining:
+        return [], "anchor_mismatch"
+    if quotes:
+        combined = "\n".join(str(evidence[value].get("text") or "") for value in selected)
+        if any(value not in combined for value in quotes):
+            return [], "quote_mismatch"
+    return selected, "repaired" if selected != proposed_ids[:len(selected)] else "retained"
+
+
 def parse_grounded_response(
     raw: str,
     *,
@@ -163,11 +364,36 @@ def parse_grounded_response(
             "citation_validation": {"status": "unanswerable", "paragraphs": 0},
         }
 
-    evidence = {f"E{index}": chunk for index, chunk in enumerate(chunks, 1)}
+    all_chunks = list(chunks)
+    seen = {
+        (
+            str(chunk.get("document_id") or ""),
+            str(chunk.get("source") or ""),
+            int(chunk.get("page") or 0),
+            int(chunk.get("chunk_index") or chunk.get("chunk") or -1),
+            str(chunk.get("text") or ""),
+        )
+        for chunk in all_chunks
+    }
+    for chunk in support_scope_chunks or []:
+        fingerprint = (
+            str(chunk.get("document_id") or ""),
+            str(chunk.get("source") or ""),
+            int(chunk.get("page") or 0),
+            int(chunk.get("chunk_index") or chunk.get("chunk") or -1),
+            str(chunk.get("text") or ""),
+        )
+        if fingerprint not in seen:
+            seen.add(fingerprint)
+            all_chunks.append(chunk)
+    evidence = {
+        f"E{index}": chunk for index, chunk in enumerate(all_chunks, 1)
+    }
     rendered_sources: list[str] = []
     source_positions: dict[str, int] = {}
     rendered_paragraphs = []
     used_evidence_ids: list[str] = []
+    proposed_evidence_ids: list[str] = []
     support_results: list[dict[str, Any]] = []
     rejected = 0
 
@@ -187,24 +413,21 @@ def parse_grounded_response(
 
         support_status = "not_checked"
         if verify_support:
-            cited_text = "\n".join(str(evidence[value].get("text") or "") for value in ids)
-            support_text = cited_text
-            if support_scope_chunks:
-                support_text += "\n" + "\n".join(
-                    str(chunk.get("text") or "")
-                    for chunk in support_scope_chunks
-                )
-            paragraph_numbers = _numeric_anchors(text)
-            evidence_numbers = _numeric_anchors(support_text)
-            quotes = [value.strip() for value in re.findall(r"[«\"“]([^»\"”]{3,})[»\"”]", text)]
-            anchors_ok = paragraph_numbers.issubset(evidence_numbers) and all(value in support_text for value in quotes)
-            if not anchors_ok:
+            ids, support_status = _best_supporting_ids(
+                text=text,
+                proposed_ids=ids,
+                evidence=evidence,
+            )
+            if not ids:
                 rejected += 1
-                support_results.append({"status": "anchor_mismatch", "evidence_ids": ids})
+                support_results.append({"status": support_status, "evidence_ids": ids})
                 continue
-            paragraph_terms = set(re.findall(r"[A-Za-z\u0600-\u06ff]{3,}", text.lower()))
-            evidence_terms = set(re.findall(r"[A-Za-z\u0600-\u06ff]{3,}", cited_text.lower()))
-            support_status = "lexical_overlap" if paragraph_terms & evidence_terms else "anchors_only"
+        for evidence_id in [
+            str(raw_id or "").upper().replace("S", "E", 1)
+            for raw_id in (item.get("evidence_ids") or [])[:3]
+        ]:
+            if evidence_id in evidence and evidence_id not in proposed_evidence_ids:
+                proposed_evidence_ids.append(evidence_id)
         support_results.append({"status": support_status, "evidence_ids": ids})
         for evidence_id in ids:
             if evidence_id not in used_evidence_ids:
@@ -237,6 +460,7 @@ def parse_grounded_response(
             "support": support_results,
         },
         "used_evidence_ids": used_evidence_ids,
+        "proposed_evidence_ids": proposed_evidence_ids,
     }
 
 

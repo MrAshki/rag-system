@@ -111,6 +111,49 @@ class RequestRouterTests(unittest.TestCase):
         self.assertEqual(plan.route, "conversational_followup")
         self.assertEqual(plan.route_implementation, "conversation_only")
 
+    def test_numeric_result_word_is_not_mistaken_for_conclusion_section(self):
+        plan = plan_request(
+            "نتیجه غربالگری مرحله دوم چه بود؟",
+            has_document_scope=True,
+        )
+        self.assertEqual(plan.route, "focused_rag")
+        self.assertIsNone(plan.target_section)
+
+    def test_ordinary_forms_word_is_not_mistaken_for_figure(self):
+        plan = plan_request(
+            "نسخه‌نویسی پرستار در جهان به چه سه شکل انجام می‌شود؟",
+            has_document_scope=True,
+        )
+        self.assertEqual(plan.route, "focused_rag")
+        self.assertIsNone(plan.target_section)
+
+    def test_explicit_numbered_figure_still_uses_section_route(self):
+        plan = plan_request("طبق شکل ۲ چه چیزی دیده می‌شود؟", has_document_scope=True)
+        self.assertEqual(plan.route, "specific_section")
+        self.assertEqual(plan.target_section, "figure")
+
+    def test_numeric_fact_language_precedes_analytical_surface_words(self):
+        plan = plan_request(
+            "در مرور حیطه‌ای چند مطالعه وارد تحلیل شد؟",
+            has_document_scope=True,
+        )
+        self.assertEqual(plan.route, "focused_rag")
+        self.assertEqual(plan.intent, "exact_answer")
+
+    def test_evidence_seeking_anaphora_uses_history_aware_retrieval(self):
+        history = [
+            {"role": "user", "content": "نتیجه غربالگری مرحله دوم چه بود؟"},
+            {"role": "assistant", "content": "بیش از ۴۲ میلیون نفر غربال شدند."},
+        ]
+        plan = plan_request(
+            "از میان آن‌ها چند درصد به بیمارستان رفتند؟",
+            has_document_scope=True,
+            conversation_history=history,
+        )
+        self.assertEqual(plan.route, "conversational_followup")
+        self.assertEqual(plan.route_implementation, "history_aware_retrieval")
+        self.assertTrue(plan.history_required)
+
 
 if __name__ == "__main__":
     unittest.main()

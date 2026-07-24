@@ -72,6 +72,28 @@ class R2RetrievalTests(unittest.TestCase):
         for term in ("names", "numbers", "quoted phrases", "technical", "negation", "Do not answer"):
             self.assertIn(term, REWRITE_SYSTEM_PROMPT)
 
+    def test_stage_recorder_observes_pre_rerank_reranked_and_final(self):
+        provider = Mock()
+        search = Mock(return_value=[chunk(1), chunk(2)])
+        rerank = Mock(side_effect=lambda _query, rows: list(reversed(rows)))
+        stages = {}
+        result = retrieve_r2(
+            query="English question",
+            document_language="en",
+            search=search,
+            rerank=rerank,
+            finalize=lambda rows: rows[:1],
+            rewrite_provider=provider,
+            candidate_k=30,
+            stage_recorder=lambda name, rows: stages.setdefault(
+                name, [item["chunk"] for item in rows]
+            ),
+        )
+        self.assertEqual(stages["production_fused_pre_rerank"], [1, 2])
+        self.assertEqual(stages["production_reranked"], [2, 1])
+        self.assertEqual(stages["production_r2_final"], [2])
+        self.assertEqual([row["chunk"] for row in result.chunks], [2])
+
     def test_production_embedding_is_only_nemotron(self):
         self.assertEqual(settings.embedding_model, "nvidia/nemotron-3-embed-1b:free")
         self.assertEqual(settings.qdrant_collection, "rag_documents")

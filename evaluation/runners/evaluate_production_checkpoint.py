@@ -70,24 +70,6 @@ def prepare(run_dir: Path, storage_state: Path) -> None:
     if state.get("projected_cost_usd", 1) >= GOAL2_HARD_CAP_USD:
         raise RuntimeError("Projected Goal 2 cost exceeds the hard cap")
     baseline.prepare(run_dir, storage_state)
-    state = baseline._load_state(run_dir)
-    goal1_state_path = (
-        baseline.ROOT
-        / "tmp"
-        / "rag-quality-goal"
-        / "goal1-baseline"
-        / "20260723-120027"
-        / "state.json"
-    )
-    if goal1_state_path.exists():
-        goal1_state = json.loads(goal1_state_path.read_text(encoding="utf-8"))
-        prior_id = (goal1_state.get("asset_ids") or {}).get("fixture-004-intentional-no-answer.pdf")
-        current_id = state["asset_ids"].get("fixture-004-intentional-no-answer.pdf")
-        if prior_id and baseline.db.get_asset(prior_id):
-            state["asset_ids"]["fixture-004-intentional-no-answer.pdf"] = prior_id
-            if current_id and current_id != prior_id:
-                state.setdefault("goal2_created_asset_ids", []).append(current_id)
-            _write(baseline._state_path(run_dir), state)
 
 
 def _record_ledger(run_dir: Path, state: dict) -> dict:
@@ -209,8 +191,9 @@ def stage1(run_dir: Path, storage_state: Path) -> None:
             clarification["answer"].strip().endswith((".", "؟", "!", "»"))
             and len(clarification["answer"]) <= 1400
         ),
-        "table_exact": "بازیافت پساب دیالیز" in table["answer"] and (
-            "۰٫۸۷" in table["answer"] or "0.87" in table["answer"]
+        "table_exact": bool(
+            table["generation_score"]["acceptable_answer_match"]
+            and table["generation_score"]["required_concept_coverage"] >= 1.0
         ),
         "table_page_9": 9 in table["cited_pages"],
         "internal_message_absent": all(row["no_internal_message_exposed"] for row in results),

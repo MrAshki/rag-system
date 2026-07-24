@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
+from dataclasses import dataclass
 
 from backend.app.vector.base import SearchResult, VectorStore
 
@@ -11,6 +12,13 @@ from backend.app.vector.base import SearchResult, VectorStore
 TOKEN_RE = re.compile(r"[0-9A-Za-z\u0600-\u06ff]{2,}")
 CHAR_TRANS = str.maketrans({"ي": "ی", "ى": "ی", "ك": "ک", "ة": "ه"})
 RRF_K = 60
+
+
+@dataclass(frozen=True)
+class HybridSearchStages:
+    dense: list[SearchResult]
+    lexical: list[SearchResult]
+    fused: list[SearchResult]
 
 
 def tokenize(text: str) -> list[str]:
@@ -39,7 +47,17 @@ def lexical_rank(query: str, chunks: list[SearchResult], top_k: int) -> list[Sea
         if score > 0:
             scored.append((score, chunk))
     scored.sort(key=lambda item: item[0], reverse=True)
-    return [chunk for _score, chunk in scored[:top_k]]
+    return [
+        SearchResult(
+            text=chunk.text,
+            source=chunk.source,
+            chunk=chunk.chunk,
+            document_id=chunk.document_id,
+            score=float(score),
+            metadata={**(chunk.metadata or {}), "retrieval": "lexical_bm25"},
+        )
+        for score, chunk in scored[:top_k]
+    ]
 
 
 def _key(chunk: SearchResult) -> tuple[str, int]:
@@ -81,7 +99,31 @@ def hybrid_search(
     top_k: int,
     lexical_scan_limit: int,
 ) -> list[SearchResult]:
+    return hybrid_search_stages(
+        store,
+        query=query,
+        query_embedding=query_embedding,
+        filters=filters,
+        top_k=top_k,
+        lexical_scan_limit=lexical_scan_limit,
+    ).fused
+
+
+def hybrid_search_stages(
+    store: VectorStore,
+    *,
+    query: str,
+    query_embedding: list[float],
+    filters: dict | None,
+    top_k: int,
+    lexical_scan_limit: int,
+) -> HybridSearchStages:
+    """Expose the exact production hybrid stages without changing ranking."""
     dense = store.search(query_embedding, filters=filters, top_k=top_k)
     lexical_pool = store.list_chunks(filters=filters, limit=lexical_scan_limit)
     lexical = lexical_rank(query, lexical_pool, top_k=top_k)
-    return reciprocal_rank_fusion(dense, lexical, top_k=top_k)
+    return HybridSearchStages(
+        dense=dense,
+        lexical=lexical,
+        fused=reciprocal_rank_fusion(dense, lexical, top_k=top_k),
+    )

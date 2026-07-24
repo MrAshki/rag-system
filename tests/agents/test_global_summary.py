@@ -5,7 +5,9 @@ from unittest.mock import patch
 from backend.app.agents.rag_graph import (
     _coverage_record,
     _run_safe_comprehensive_summary,
+    _substantive_groups,
     _summary_coverage_contract,
+    _summary_structure_guidance,
 )
 
 
@@ -17,6 +19,109 @@ EVIDENCE = [
 
 
 class GlobalSummaryTests(unittest.TestCase):
+    @staticmethod
+    def group(title, role="section", text=""):
+        return {"title": title, "role": role, "chunks": [{"text": text}]}
+
+    def test_summary_structure_adapts_to_applied_and_theoretical_research(self):
+        applied, applied_guidance = _summary_structure_guidance(
+            "research_article",
+            [
+                self.group("Methods", "methodology"),
+                self.group("Results", "findings"),
+                self.group("Discussion", "discussion"),
+            ],
+        )
+        theoretical, theoretical_guidance = _summary_structure_guidance(
+            "research_article",
+            [
+                self.group("Conceptual criterion", text="A logical argument and thought experiment"),
+                self.group("Conclusion", "conclusion"),
+            ],
+        )
+        self.assertEqual(applied, "applied_research")
+        self.assertIn("method", applied_guidance)
+        self.assertEqual(theoretical, "theoretical_research")
+        self.assertIn("central argument", theoretical_guidance)
+        self.assertIn("never as applied", theoretical_guidance)
+
+    def test_generic_method_word_inside_theory_does_not_create_applied_schema(self):
+        family, guidance = _summary_structure_guidance(
+            "research_article",
+            [
+                self.group(
+                    "Section I",
+                    text=(
+                        "This method of reasoning gives a result about the "
+                        "criterion of physical reality."
+                    ),
+                ),
+                self.group("Section 2", text="A logical argument follows."),
+            ],
+        )
+        self.assertEqual(family, "theoretical_research")
+        self.assertIn("never as applied", guidance)
+
+    @patch("backend.app.agents.rag_graph._load_chunks_for_asset")
+    @patch("backend.app.agents.rag_graph._selected_assets")
+    def test_applied_subsections_roll_into_findings_and_admin_is_excluded(
+        self, selected_assets, load_chunks,
+    ):
+        selected_assets.return_value = [{
+            "id": "asset-1",
+            "original_filename": "paper.pdf",
+        }]
+        rows = [
+            ("u1", "مقدمه", "introduction", 1),
+            ("u2", "روش کار", "methodology", 2),
+            ("u3", "یافته ها", "findings", 3),
+            ("u4", "۱. گزینه نخست", "section", 4),
+            ("u5", "۲. گزینه دوم", "section", 5),
+            ("u6", "بحث", "discussion", 6),
+            ("u7", "نتیجه‌گیری", "conclusion", 7),
+            ("u8", "تارض منافع", "section", 8),
+        ]
+        load_chunks.return_value = [
+            {
+                "document_id": "asset-1",
+                "parent_id": unit_id,
+                "parent_title": title,
+                "parent_role": role,
+                "source": "paper.pdf",
+                "text": f"text {title}",
+                "page": page,
+                "chunk_index": page,
+            }
+            for unit_id, title, role, page in rows
+        ]
+        _assets, groups = _substantive_groups({})
+        self.assertEqual(
+            [group["role"] for group in groups],
+            ["introduction", "methodology", "findings", "discussion", "conclusion"],
+        )
+        findings = next(group for group in groups if group["role"] == "findings")
+        self.assertEqual(len(findings["chunks"]), 3)
+        self.assertNotIn("تارض منافع", [group["title"] for group in groups])
+
+    def test_summary_structure_adapts_to_review_policy_and_short_fixture(self):
+        review, _ = _summary_structure_guidance(
+            "review_article",
+            [self.group("Systematic review method")],
+        )
+        policy, policy_guidance = _summary_structure_guidance(
+            "sectioned_report",
+            [self.group("Retention rules")],
+        )
+        short, short_guidance = _summary_structure_guidance(
+            "flat_document",
+            [self.group("Page 1")],
+        )
+        self.assertEqual(review, "review")
+        self.assertEqual(policy, "policy_or_sectioned_report")
+        self.assertIn("operative rules", policy_guidance)
+        self.assertEqual(short, "source_led")
+        self.assertIn("Do not impose research-method headings", short_guidance)
+
     def test_coverage_contract_rejects_missing_section(self):
         raw = json.dumps({
             "answerable": True,
@@ -216,6 +321,53 @@ class GlobalSummaryTests(unittest.TestCase):
         result = _run_safe_comprehensive_summary({"question": "summary", "scope": "selected"})
         self.assertNotIn("raw partial", result["answer"])
         self.assertFalse(result["metadata"]["coverage"]["coverage_passed"])
+
+    @patch("backend.app.agents.rag_graph.get_chat_provider", return_value=object())
+    @patch("backend.app.agents.rag_graph.rag.generate_response")
+    @patch("backend.app.agents.rag_graph._substantive_groups")
+    def test_summary_coverage_uses_supported_proposed_section_ids_after_citation_repair(
+        self, groups, generate, _provider,
+    ):
+        group_rows = []
+        for index, role in enumerate(("introduction", "methodology", "findings"), start=1):
+            chunk = {
+                "text": f"evidence {role}",
+                "source": "paper.pdf",
+                "page": index,
+                "parent_id": role,
+                "parent_title": role,
+                "parent_role": role,
+                "chunk_index": index,
+                "document_id": "asset-1",
+            }
+            group_rows.append({
+                "key": ("asset-1", role),
+                "coverage_key": f"paper.pdf :: {role}",
+                "title": role,
+                "role": role,
+                "source": "paper.pdf",
+                "chunks": [chunk],
+                "pages": [index],
+            })
+        groups.return_value = ([{
+            "id": "asset-1",
+            "original_filename": "paper.pdf",
+            "document_profile_json": {"document_type": "research_article", "title": "Paper"},
+        }], group_rows)
+        generate.return_value = {
+            "answer": "Validated summary.",
+            "sources": ["paper.pdf - page 1"],
+            "used_evidence_ids": ["E1"],
+            "proposed_evidence_ids": ["E1", "E2", "E3"],
+            "generation_telemetry": {"fallback_used": False},
+        }
+        result = _run_safe_comprehensive_summary({
+            "question": "Summarize",
+            "generation_question": "Summarize",
+            "scope": "selected",
+        })
+        self.assertTrue(result["metadata"]["coverage"]["coverage_passed"])
+        self.assertEqual(len(result["metadata"]["coverage"]["covered_sections"]), 3)
 
 
 if __name__ == "__main__":

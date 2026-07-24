@@ -1,0 +1,5 @@
+# Isolated deterministic evaluation dependencies.
+# Install only for metric development and release evaluation:
+#   python -m pip install -r requirements-eval.txt
+pytrec-eval-terrier==0.5.10
+deepeval==4.1.3

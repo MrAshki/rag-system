@@ -2,9 +2,18 @@
 __pycache__/
 *.pyc
 venv/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
 
 # Environment / local config
 .env
+.env.*
+!.env.example
 .claude/
 
 # Large downloaded model & package files (fetch separately, see README)
@@ -21,6 +30,12 @@ tmp/
 
 # Prevent accidental reintroduction of the removed legacy SQLite database.
 app_data.sqlite3
+*.sqlite
+*.sqlite3
+
+# Local database/vector runtime directories.
+postgres_data/
+qdrant_storage/
 
 # Runtime server logs
 *.log
@@ -34,6 +49,7 @@ docs/*
 !docs/rag-document-conversation-architecture.md
 !docs/rag-quality-baseline.md
 !docs/rag-production-path-fixes.md
+!docs/rag-goal3-metric-optimization.md
 
 # Per-user file store: originals + normalized markdown + metadata (runtime data).
 # Replaces the old flat docs/ + converted/ layout; regenerated from uploads.

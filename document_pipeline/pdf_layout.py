@@ -18,6 +18,7 @@ from typing import Any
 ARABIC_RE = re.compile(r"[\u0600-\u06ff]")
 LATIN_RE = re.compile(r"[A-Za-z]")
 DIGIT_RE = re.compile(r"[0-9\u06f0-\u06f9\u0660-\u0669]+")
+RTL_DIGIT_RUN_RE = re.compile(r"[\u06f0-\u06f9\u0660-\u0669]{2,}")
 SECTION_MARKER_RE = re.compile(
     r"^(?:section\s+([0-9ivxlcdm]+)|([0-9]{1,2}|[ivxlcdm]+)[.)])\s*$",
     re.IGNORECASE,
@@ -51,6 +52,12 @@ def normalize_visible(text: str) -> str:
         "\u200e": "", "\u200f": "", "\u200b": "", "\u200d": "",
     }))
     value = re.sub(r"\s+", " ", value).strip()
+    # pypdf's RTL display algorithm prepends Arabic/Persian digit glyphs while
+    # it is in an RTL run, reversing every multi-digit sequence from generated
+    # Persian PDFs (for example ۱۵ -> ۵۱ and ۲۶ -> ۶۲).  Restore logical digit
+    # order deterministically.  Latin digits and decimal/slash notation are
+    # deliberately untouched because their bidi behavior differs by font/run.
+    value = RTL_DIGIT_RUN_RE.sub(lambda match: match.group(0)[::-1], value)
     # Broken PDF text layers frequently split a Persian word around a single
     # glyph ("عل یت", "د یوی د", "فیز ی کی").  Joining only one-letter
     # Persian fragments, except the legitimate conjunction "و", repairs the
@@ -200,6 +207,38 @@ def _visual_title(styled_pages: list[dict[str, dict[str, Any]]], language: str) 
     return max(candidates)[-1] if candidates else None
 
 
+def _short_sectioned_document(styled_pages: list[dict[str, dict[str, Any]]]) -> bool:
+    """Detect short documents whose large top line is a per-page section title.
+
+    In generated policies and test fixtures, every page commonly starts with a
+    same-sized bold heading and there is no separate document title.  Selecting
+    the longest of those headings as a global title causes unrelated pages to
+    be treated as front matter.  Requiring comparable heading signals on most
+    pages avoids that collapse without relying on filenames or fixture IDs.
+    """
+    if not (2 <= len(styled_pages) <= 4):
+        return False
+    page_headings: list[tuple[float, str]] = []
+    for styled in styled_pages:
+        candidates = [
+            info
+            for info in styled.values()
+            if info.get("font_heading") and float(info.get("max_size") or 0) >= 14
+        ]
+        if not candidates:
+            continue
+        top = max(candidates, key=lambda item: float(item.get("max_size") or 0))
+        page_headings.append((
+            float(top.get("max_size") or 0),
+            compact_signature(str(top.get("text") or "")),
+        ))
+    if len(page_headings) < max(2, math.ceil(len(styled_pages) * 0.67)):
+        return False
+    sizes = [size for size, _signature in page_headings]
+    signatures = {signature for _size, signature in page_headings if signature}
+    return bool(signatures) and len(signatures) >= 2 and max(sizes) - min(sizes) <= 1.0
+
+
 def _match_title_line(line: str, title: str | None) -> bool:
     left = compact_signature(line)
     right = compact_signature(title or "")
@@ -251,7 +290,8 @@ def _heading_match(line: str, styled: dict[str, dict[str, Any]]) -> bool:
     if len(line) <= 90:
         for candidate, info in styled.items():
             if info.get("font_heading") and min(len(signature), len(candidate)) >= 4:
-                if signature in candidate or candidate in signature:
+                containment = min(len(signature), len(candidate)) / max(len(signature), len(candidate))
+                if (signature in candidate or candidate in signature) and containment >= 0.55:
                     return True
     return False
 
@@ -285,20 +325,40 @@ def analyze_pdf(
     all_text = "\n".join(page_texts)
     language = _dominant_language(all_text)
     visual_title = _visual_title(styled_pages, language)
+    short_sectioned = _short_sectioned_document(styled_pages)
+    if short_sectioned:
+        # The visitor API can recover a complete visual line when ordinary
+        # extract_text drops a clipped RTL span.  On compact generated
+        # documents, use those positioned rows when they represent a meaningful
+        # share of the page; this also excludes small repeated footer furniture.
+        for index, styled in enumerate(styled_pages):
+            visual_lines = [
+                str(info.get("text") or "")
+                for info in sorted(styled.values(), key=lambda item: float(item.get("y") or 0))
+                if str(info.get("text") or "").strip()
+            ]
+            visual_chars = sum(len(compact_signature(line)) for line in visual_lines)
+            raw_chars = sum(len(compact_signature(line)) for line in raw_pages[index])
+            if len(visual_lines) >= 2 and visual_chars >= max(20, raw_chars * 0.15):
+                raw_pages[index] = visual_lines
     title = (
         filename_title
         if language == "fa" and _plausible_title(filename_title)
-        else visual_title if _plausible_title(visual_title)
+        else visual_title if not short_sectioned and _plausible_title(visual_title)
         else metadata_title if _plausible_title(metadata_title)
         else filename_title if _plausible_title(filename_title)
         else None
     )
-    large_title_signatures = {
-        signature
-        for styled in styled_pages[:4]
-        for signature, info in styled.items()
-        if float(info.get("max_size") or 0) >= 14
-    }
+    large_title_signatures = (
+        set()
+        if short_sectioned
+        else {
+            signature
+            for styled in styled_pages[:4]
+            for signature, info in styled.items()
+            if float(info.get("max_size") or 0) >= 14
+        }
+    )
     repeated = _repeated_margin_signatures(raw_pages)
     image_counts = []
     for page in reader.pages:
@@ -456,7 +516,13 @@ def analyze_pdf(
             # On bilingual journal title pages, everything before the abstract
             # is descriptive metadata. The dominant-language title has already
             # been emitted and author data is retained in the sidecar.
-            if language == "fa" and page_index <= 1 and not abstract_seen_on_page:
+            if (
+                language == "fa"
+                and len(raw_pages) >= 4
+                and title_page_anchor
+                and page_index <= 1
+                and not abstract_seen_on_page
+            ):
                 removed["front_matter"] += 1
                 continue
 
@@ -523,7 +589,7 @@ def analyze_pdf(
         "layout_removed_by_reason": dict(removed),
         "layout_removed_lines": sum(removed.values()),
         "repeated_margin_signatures": len(repeated),
-        "layout_analysis_version": "v1",
+        "layout_analysis_version": "v2",
         "embedded_image_count": sum(image_counts),
         "image_pages": [index + 1 for index, count in enumerate(image_counts) if count],
         "has_embedded_images": any(image_counts),

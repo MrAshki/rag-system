@@ -29,7 +29,7 @@ from document_pipeline import ocr
 from document_pipeline import pdf_layout
 import storage
 
-NORMALIZATION_VERSION = "v4"
+NORMALIZATION_VERSION = "v5"
 ENABLE_TEXT_CLEANUP = os.getenv("ENABLE_TEXT_CLEANUP", "true").lower() == "true"
 
 # Step 2.5: optional LLM-assisted relabeling, off by default.
@@ -137,16 +137,35 @@ def _looks_garbled(text: str) -> bool:
     prose? See the GARBLE_* constants above for the calibrated heuristic."""
     if not text:
         return False
-    letters = sum(1 for c in text if _is_arabic_letter(c))
-    latin_letters = sum(1 for c in text if c.isascii() and c.isalpha())
+    # Repeated page furniture can dominate short, otherwise healthy pages and
+    # artificially depress the stopword rate.  Judge each distinct visible
+    # line once; genuinely garbled prose remains garbled after de-duplication,
+    # while generated headers/footers no longer trigger needless OCR.
+    distinct_lines: list[str] = []
+    seen_lines: set[str] = set()
+    for raw_line in text.splitlines():
+        line = re.sub(r"\s+", " ", raw_line).strip()
+        signature = re.sub(r"[^A-Za-z\u0600-\u06ff]+", "", line).lower()
+        duplicate = signature in seen_lines or any(
+            (signature in prior or prior in signature)
+            and min(len(signature), len(prior)) / max(len(signature), len(prior)) >= 0.75
+            for prior in seen_lines
+        )
+        if not signature or duplicate:
+            continue
+        seen_lines.add(signature)
+        distinct_lines.append(line)
+    judged_text = "\n".join(distinct_lines) or text
+    letters = sum(1 for c in judged_text if _is_arabic_letter(c))
+    latin_letters = sum(1 for c in judged_text if c.isascii() and c.isalpha())
     script_letters = letters + latin_letters
     if letters < GARBLE_MIN_LETTERS_FOR_DIAC or letters / max(script_letters, 1) < GARBLE_MIN_ARABIC_SHARE:
         return False
     if letters >= GARBLE_MIN_LETTERS_FOR_DIAC:
-        diac = sum(1 for c in text if c in _FA_DIACRITICS)
+        diac = sum(1 for c in judged_text if c in _FA_DIACRITICS)
         if diac / letters > GARBLE_DIACRITIC_RATE_MAX:
             return True
-    tokens = [t for t in (_norm_fa_token(x) for x in text.split()) if t]
+    tokens = [t for t in (_norm_fa_token(x) for x in judged_text.split()) if t]
     if len(tokens) >= GARBLE_MIN_TOKENS:
         hits = sum(1 for t in tokens if t in _FA_STOPWORDS)
         if hits / len(tokens) < GARBLE_STOPWORD_RATE_MIN:

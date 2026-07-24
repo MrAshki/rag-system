@@ -20,6 +20,7 @@ class QdrantReadTests(unittest.TestCase):
                 payload={
                     "text": "evidence",
                     "source": "sample.pdf",
+                    "chunk_id": "chunk-7",
                     "chunk_index": 7,
                     "document_id": "doc-1",
                     "metadata": {"page": 3},
@@ -32,6 +33,7 @@ class QdrantReadTests(unittest.TestCase):
 
         self.assertEqual(results[0].text, "evidence")
         self.assertEqual(results[0].metadata["page"], 3)
+        self.assertEqual(results[0].metadata["chunk_id"], "chunk-7")
         store.client.query_points.assert_called_once()
         store.client.upsert.assert_not_called()
 
@@ -60,6 +62,7 @@ class QdrantReadTests(unittest.TestCase):
             "payload": {
                 "text": "listed evidence",
                 "source": "sample.pdf",
+                "chunk_id": "chunk-4",
                 "chunk_index": 4,
                 "document_id": "doc-3",
                 "metadata": {"section": "Intro"},
@@ -69,6 +72,7 @@ class QdrantReadTests(unittest.TestCase):
         results = store.list_chunks({"document_id": "doc-3"}, limit=10)
 
         self.assertEqual(results[0].metadata["section"], "Intro")
+        self.assertEqual(results[0].metadata["chunk_id"], "chunk-4")
         store._scroll_rest.assert_called_once_with(None, 10)
 
 

@@ -17,8 +17,13 @@ from backend.app.vector import get_vector_store
 from backend.app.vector.base import VectorChunk
 from backend.app.vector.embeddings import embed_text, embedding_device
 from backend.app.vector.rerankers import openrouter_rerank, reranker_provider
-from backend.app.retrieval import hybrid_search, retrieve_r2
-from backend.app.grounding import build_grounded_messages, grounded_contract_error, parse_grounded_response
+from backend.app.retrieval import hybrid_search_stages, retrieve_r2
+from backend.app.grounding import (
+    build_grounded_messages,
+    grounded_contract_error,
+    parse_grounded_response,
+    repair_grounded_contract,
+)
 from backend.app.generation import GenerationPayload, GenerationUnavailableError, GroundedGenerationOrchestrator
 from backend.app.services.usage_tracking import estimate_tokens_from_text, record_compute_usage_event
 from model_gateway import get_chat_provider, list_chat_model_options
@@ -52,7 +57,7 @@ CHAT_PROVIDER = get_chat_provider("openrouter", settings.rag_primary_generator_m
 # Bump this whenever the grounding/language prompt or guards change. It is logged
 # at startup and on the health route so we can PROVE which prompt a running server
 # is actually serving (a stale server keeps the old value in memory until restart).
-ANSWER_PROMPT_VERSION = "structured_citations_v4_section_coverage"
+ANSWER_PROMPT_VERSION = "structured_citations_v5_metric_optimization"
 
 # R2 fuses bounded lexical and Nemotron dense candidates, then reranks exactly once.
 RERANKER_PROVIDER = reranker_provider()
@@ -317,6 +322,8 @@ def query_documents(
     document_id: str = None,
     document_ids: List[str] = None,
     user_id: int = None,
+    stage_recorder=None,
+    search_label: str = "original",
 ) -> List[Dict]:
     try:
         filters = {}
@@ -329,8 +336,8 @@ def query_documents(
             filters["document_id"] = document_id
 
         query_embedding = embed_text(question)
-        results = (
-            hybrid_search(
+        if ENABLE_HYBRID_RETRIEVAL:
+            stages = hybrid_search_stages(
                 vector_store,
                 query=question,
                 query_embedding=query_embedding,
@@ -338,16 +345,25 @@ def query_documents(
                 top_k=n_results,
                 lexical_scan_limit=LEXICAL_SCAN_LIMIT,
             )
-            if ENABLE_HYBRID_RETRIEVAL
-            else vector_store.search(query_embedding, filters=filters, top_k=n_results)
-        )
-        chunks = []
-        for result in results:
+            stage_results = {
+                f"production_dense:{search_label}": stages.dense,
+                f"production_sparse:{search_label}": stages.lexical,
+                f"production_hybrid:{search_label}": stages.fused,
+            }
+            results = stages.fused
+        else:
+            results = vector_store.search(
+                query_embedding, filters=filters, top_k=n_results
+            )
+            stage_results = {f"production_dense:{search_label}": results}
+
+        def serialize(result) -> Dict:
             meta = result.metadata or {}
-            chunks.append({
+            return {
                 "text": result.text,
                 "source": result.source or meta.get("source", "نامشخص"),
                 "chunk": result.chunk or meta.get("chunk", "?"),
+                "chunk_id": meta.get("chunk_id"),
                 "document_id": result.document_id,
                 "score": result.score,
                 "chapter": meta.get("chapter"),
@@ -360,8 +376,12 @@ def query_documents(
                 "parent_role": meta.get("parent_role"),
                 "parent_page_start": meta.get("parent_page_start"),
                 "parent_page_end": meta.get("parent_page_end"),
-            })
-        return chunks
+            }
+
+        if stage_recorder:
+            for stage_name, stage_rows in stage_results.items():
+                stage_recorder(stage_name, [serialize(row) for row in stage_rows])
+        return [serialize(result) for result in results]
     except Exception as e:
         print(f"Error querying documents: {str(e)}", flush=True)
         raise RuntimeError("ارتباط با سرویس بازیابی اسناد برقرار نشد؛ کمی بعد دوباره تلاش کنید.") from e
@@ -490,19 +510,25 @@ def _selected_document_language(
 
 def retrieve_with_metadata(
     query: str, document_id: str = None, document_ids: List[str] = None, user_id: int = None,
-    top_k: int = None, retrieve_k: int = None,
+    top_k: int = None, retrieve_k: int = None, stage_recorder=None,
 ) -> tuple[List[Dict], Dict]:
     """Run one bounded production retrieval pass and return its safe telemetry."""
     top_k = top_k or RERANK_TOP_K
     candidate_k = retrieve_k or RETRIEVE_K
 
+    search_number = 0
+
     def search(search_query: str) -> List[Dict]:
+        nonlocal search_number
+        search_number += 1
         return query_documents(
             search_query,
             n_results=candidate_k,
             document_id=document_id,
             document_ids=document_ids,
             user_id=user_id,
+            stage_recorder=stage_recorder,
+            search_label="original" if search_number == 1 else "rewrite",
         )
 
     def rerank_once(rerank_query: str, chunks: List[Dict]) -> List[Dict]:
@@ -523,6 +549,7 @@ def retrieve_with_metadata(
             rewrite_provider=rewrite_provider,
             candidate_k=candidate_k,
             cross_language_rewrite_enabled=CROSS_LANGUAGE_REWRITE_ENABLED,
+            stage_recorder=stage_recorder,
         )
         return result.chunks, result.telemetry
 
@@ -649,13 +676,27 @@ def _question_language(text: str) -> str:
     return "en"
 
 
-def _no_info_message(scope: str, language: str = "fa") -> str:
+def _no_info_message(
+    scope: str,
+    language: str = "fa",
+    question: str | None = None,
+) -> str:
+    topic = re.sub(r"\s+", " ", (question or "")).strip(" \t\r\n؟?!.،؛:")
+    if len(topic) > 140:
+        topic = topic[:137].rstrip() + "…"
     if language == "en":
+        if topic and scope == "selected":
+            return (
+                f'The selected document does not provide enough information about '
+                f'"{topic}" to answer reliably.'
+            )
         return (
             "The selected document does not contain enough information to answer this question."
             if scope == "selected"
             else "The available documents do not contain enough information to answer this question."
         )
+    if topic and scope == "selected":
+        return f"سند انتخاب‌شده دربارهٔ «{topic}» اطلاعات کافی برای پاسخ قابل‌اعتماد ارائه نمی‌کند."
     return (
         "در سند انتخاب‌شده اطلاعات کافی برای پاسخ وجود ندارد."
         if scope == "selected"
@@ -670,7 +711,9 @@ def _build_answer_messages(
     selected_source: str = None,
     task_instructions: str = None,
 ) -> List[Dict]:
-    no_info_message = _no_info_message(scope, _question_language(question))
+    no_info_message = _no_info_message(
+        scope, _question_language(question), question
+    )
     return build_grounded_messages(
         question=question,
         chunks=relevant_chunks,
@@ -734,6 +777,50 @@ def generate_free_response(question: str, chat_provider: ChatProvider = None) ->
         return {"answer": "خطا در تولید پاسخ.", "sources": []}
 
 
+def _parse_conversation_explanation(raw: str) -> tuple[str, str]:
+    """Accept common provider response shapes without leaking serialization.
+
+    JSON mode is requested, but providers may still return fenced JSON, a short
+    preamble, plain text, or a truncated final brace.  Conversation-only turns
+    must handle those shapes locally and must never retry through retrieval.
+    """
+    value = (raw or "").strip()
+    if not value:
+        return "", "empty"
+    unfenced = re.sub(r"^```(?:json)?\s*|\s*```$", "", value, flags=re.IGNORECASE).strip()
+    candidates = [unfenced]
+    opening = unfenced.find("{")
+    if opening > 0:
+        candidates.append(unfenced[opening:])
+    for candidate in candidates:
+        try:
+            payload, _end = json.JSONDecoder().raw_decode(candidate)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if isinstance(payload, dict):
+            explanation = str(payload.get("explanation") or payload.get("answer") or "").strip()
+            if explanation:
+                return explanation, "json"
+
+    # Salvage the value of a cut-off JSON string while keeping escape handling
+    # bounded.  This is deliberately narrower than repairing arbitrary JSON.
+    match = re.search(
+        r'["\'](?:explanation|answer)["\']\s*:\s*["\'](.+?)(?:["\']\s*[,}]|$)',
+        unfenced,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if match:
+        explanation = match.group(1).replace(r"\"", '"').replace(r"\n", " ").strip()
+        if explanation:
+            return explanation, "repaired_json"
+
+    # Plain prose is already the desired user-facing format. Reject strings
+    # that are only serialization debris.
+    if not re.fullmatch(r"[\s{}\[\]\"':,]+", unfenced):
+        return unfenced, "plain_text"
+    return "", "malformed"
+
+
 def generate_conversation_response(
     question: str,
     previous_answer: str,
@@ -778,8 +865,9 @@ def generate_conversation_response(
             },
             response_format="json",
         ).strip()
-        payload = json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", answer, flags=re.IGNORECASE))
-        answer = str(payload.get("explanation") or "").strip()
+        answer, parse_mode = _parse_conversation_explanation(answer)
+        if parse_mode == "repaired_json" and not re.search(r"[.!؟…»)]\s*$", answer):
+            answer = ""
         if answer:
             usage = dict(getattr(provider, "last_call_metadata", {}) or {})
             return {
@@ -792,6 +880,7 @@ def generate_conversation_response(
                     "primary_cost": float(usage.get("cost_usd") or 0),
                     "fallback_cost": 0.0,
                     "total_generation_latency_ms": int(usage.get("latency_ms") or 0),
+                    "response_parse_mode": parse_mode,
                 },
             }
     except Exception as exc:  # Conversation fallback must never start retrieval.
@@ -850,7 +939,9 @@ def generate_response(
     max_output_tokens: int = None,
     support_scope_chunks: List[Dict] = None,
 ) -> Dict:
-    no_info_message = _no_info_message(scope, _question_language(question))
+    no_info_message = _no_info_message(
+        scope, _question_language(question), question
+    )
     if not relevant_chunks:
         return {"answer": no_info_message, "sources": []}
 
@@ -873,25 +964,44 @@ def generate_response(
     orchestrator = _grounded_generation_orchestrator(
         chat_provider, fallback_provider, max_output_tokens=max_output_tokens,
     )
+    locally_repaired: dict[str, str] = {}
+
     def validate_contract(raw: str) -> str | None:
         error = grounded_contract_error(raw, evidence_count=len(relevant_chunks))
+        if error == "citation_marker_format_invalid":
+            repaired = repair_grounded_contract(
+                raw, evidence_count=len(relevant_chunks)
+            )
+            if repaired is not None:
+                repaired_error = (
+                    extra_contract_error(repaired)
+                    if extra_contract_error is not None
+                    else None
+                )
+                if repaired_error is None:
+                    locally_repaired[raw] = repaired
+                    return None
         if error is not None:
             return error
         return extra_contract_error(raw) if extra_contract_error is not None else None
+
+    def parse_contract(raw: str) -> Dict:
+        return parse_grounded_response(
+            locally_repaired.get(raw, raw),
+            chunks=relevant_chunks,
+            citation_label=_citation_label,
+            no_info_message=no_info_message,
+            verify_support=True,
+            support_scope_chunks=support_scope_chunks,
+        )
 
     try:
         result, telemetry = orchestrator.generate(
             payload=payload,
             contract_error=validate_contract,
-            parse_response=lambda raw: parse_grounded_response(
-                raw,
-                chunks=relevant_chunks,
-                citation_label=_citation_label,
-                no_info_message=no_info_message,
-                verify_support=True,
-                support_scope_chunks=support_scope_chunks,
-            ),
+            parse_response=parse_contract,
         )
+        telemetry["local_contract_repair_used"] = bool(locally_repaired)
         result["generation_telemetry"] = telemetry
         return result
     except GenerationUnavailableError as exc:
@@ -921,7 +1031,9 @@ def generate_response_stream(
     fallback_provider: ChatProvider = None,
     retrieval_metadata: Dict = None,
 ) -> Iterable[Dict]:
-    no_info_message = _no_info_message(scope, _question_language(question))
+    no_info_message = _no_info_message(
+        scope, _question_language(question), question
+    )
     if not relevant_chunks:
         yield {"type": "token", "delta": no_info_message}
         yield {"type": "final", "answer": no_info_message, "sources": []}
@@ -993,64 +1105,8 @@ def answer_request(
         conversation_id=conversation_id,
         request_id=request_id,
         langgraph_enabled=ENABLE_LANGGRAPH_RAG,
+        semantic_supervisor_enabled=True,
     )
-
-    # Retained temporarily as unreachable migration reference; production can
-    # no longer enter this former parallel path.
-    asset_ids = [asset_id for asset_id in (asset_ids or []) if asset_id]
-    doc_filter = document_id if scope == "selected" and not asset_ids else None
-    doc_filters = asset_ids or None
-    if asset_ids:
-        scope = "selected"
-    generation_question = generation_question or question
-    if not doc_filters and not doc_filter:
-        provider = get_chat_provider(chat_provider_name, chat_model, feature="chat_free")
-        return generate_free_response(generation_question, chat_provider=provider)
-
-    provider = get_chat_provider(chat_provider_name, chat_model, feature="chat_grounded")
-    sub_qs = understand_query(question, chat_provider=provider)
-
-    if len(sub_qs) == 1:
-        sq = sub_qs[0]
-        chunks, retrieval_metadata = retrieve_with_metadata(
-            sq["search_query"],
-            document_id=doc_filter,
-            document_ids=doc_filters,
-            user_id=user_id,
-        )
-        return generate_response(
-            generation_question,
-            chunks,
-            scope=scope,
-            selected_source=selected_source,
-            chat_provider=provider,
-            retrieval_metadata=retrieval_metadata,
-        )
-
-    blocks = []
-    merged_sources = []
-    seen = set()
-    for sq in sub_qs:
-        chunks, retrieval_metadata = retrieve_with_metadata(
-            sq["search_query"],
-            document_id=doc_filter,
-            document_ids=doc_filters,
-            user_id=user_id,
-        )
-        sub = generate_response(
-            sq["user_question"],
-            chunks,
-            scope=scope,
-            selected_source=selected_source,
-            chat_provider=provider,
-            retrieval_metadata=retrieval_metadata,
-        )
-        blocks.append(f"❖ {sq['user_question']}\n{sub['answer']}")
-        for s in sub["sources"]:
-            if s not in seen:
-                seen.add(s)
-                merged_sources.append(s)
-    return {"answer": "\n\n".join(blocks), "sources": merged_sources}
 
 
 def answer_request_stream(
@@ -1091,132 +1147,6 @@ def answer_request_stream(
         conversation_id=conversation_id,
         request_id=request_id,
         langgraph_enabled=ENABLE_LANGGRAPH_RAG,
+        semantic_supervisor_enabled=True,
     )
     return
-
-    # Unreachable migration reference for the removed legacy stream pipeline.
-    asset_ids = [asset_id for asset_id in (asset_ids or []) if asset_id]
-    doc_filter = document_id if scope == "selected" and not asset_ids else None
-    doc_filters = asset_ids or None
-    if asset_ids:
-        scope = "selected"
-    generation_question = generation_question or question
-    yield _trace("request", "started")
-
-    if not doc_filters and not doc_filter:
-        provider = get_chat_provider(chat_provider_name, chat_model, feature="chat_free")
-        yield _trace("generate", "started", provider=provider.name, model=provider.model, mode="free_chat")
-        final_event = None
-        for event in generate_free_response_stream(generation_question, chat_provider=provider):
-            if event.get("type") == "final":
-                final_event = event
-            else:
-                yield event
-        yield _trace("generate", "done", mode="free_chat")
-        if final_event:
-            yield final_event
-        yield {"type": "done"}
-        return
-
-    provider = get_chat_provider(chat_provider_name, chat_model, feature="chat_grounded")
-    yield _trace("understand_query", "started")
-    sub_qs = understand_query(question, chat_provider=provider)
-    yield _trace("understand_query", "done", question_count=len(sub_qs))
-
-    if len(sub_qs) == 1:
-        sq = sub_qs[0]
-        yield _trace("retrieve", "started", query=sq["search_query"])
-        chunks, retrieval_metadata = retrieve_with_metadata(
-            sq["search_query"],
-            document_id=doc_filter,
-            document_ids=doc_filters,
-            user_id=user_id,
-        )
-        yield _trace("retrieve", "done", chunks=len(chunks))
-
-        yield _trace(
-            "generate",
-            "started",
-            provider=provider.name,
-            model=provider.model,
-        )
-        final_event = None
-        for event in generate_response_stream(
-            generation_question,
-            chunks,
-            scope=scope,
-            selected_source=selected_source,
-            chat_provider=provider,
-            retrieval_metadata=retrieval_metadata,
-        ):
-            if event.get("type") == "final":
-                final_event = event
-            else:
-                yield event
-        yield _trace("generate", "done")
-        if final_event:
-            yield final_event
-        yield {"type": "done"}
-        return
-
-    answer_parts = []
-    merged_sources = []
-    seen = set()
-    for i, sq in enumerate(sub_qs):
-        yield _trace(
-            "sub_question",
-            "started",
-            index=i + 1,
-            total=len(sub_qs),
-            question=sq["user_question"],
-        )
-        yield _trace("retrieve", "started", index=i + 1, query=sq["search_query"])
-        chunks, retrieval_metadata = retrieve_with_metadata(
-            sq["search_query"],
-            document_id=doc_filter,
-            document_ids=doc_filters,
-            user_id=user_id,
-        )
-        yield _trace("retrieve", "done", index=i + 1, chunks=len(chunks))
-
-        separator = "\n\n" if i else ""
-        prefix = f"{separator}❖ {sq['user_question']}\n"
-        answer_parts.append(prefix)
-        yield {"type": "token", "delta": prefix}
-
-        yield _trace(
-            "generate",
-            "started",
-            index=i + 1,
-            provider=provider.name,
-            model=provider.model,
-        )
-        final_event = None
-        for event in generate_response_stream(
-            sq["user_question"],
-            chunks,
-            scope=scope,
-            selected_source=selected_source,
-            chat_provider=provider,
-            retrieval_metadata=retrieval_metadata,
-        ):
-            if event.get("type") == "final":
-                final_event = event
-                answer_parts.append(event.get("answer", ""))
-                for source in event.get("sources", []):
-                    if source not in seen:
-                        seen.add(source)
-                        merged_sources.append(source)
-            elif event.get("type") == "token":
-                yield event
-            else:
-                yield event
-        yield _trace("generate", "done", index=i + 1)
-        yield _trace("sub_question", "done", index=i + 1)
-
-    yield {
-        "type": "final",
-        "answer": "".join(answer_parts),
-        "sources": merged_sources,
-    }
-    yield {"type": "done"}

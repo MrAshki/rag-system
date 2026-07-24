@@ -1,8 +1,8 @@
-"""Low-cost request classification and retrieval budgeting.
+"""Deterministic fallback routing and retrieval budgeting.
 
-The router is deterministic by default. It gives LangGraph an explicit plan
-without spending an LLM call on ordinary requests. Ambiguous multi-question
-messages can still opt into the existing model-based decomposition step.
+Production requests are classified semantically by the intent supervisor and
+validated deterministically. This router remains the bounded fallback for
+malformed, timed-out, or low-confidence supervisor responses.
 """
 from __future__ import annotations
 
@@ -66,6 +66,16 @@ ANALYTICAL_RE = re.compile(
     r"relationship|relation|argument|claim|why|how|analy|concept|theme",
     re.IGNORECASE,
 )
+DEFINITION_RE = re.compile(
+    r"(?:چگونه|چطور)\s+تعریف|تعریف\s+(?:شده|می‌شود)|(?:چیست|یعنی\s+چه)|"
+    r"how\s+is\s+.+\s+defined|what\s+is\s+the\s+definition",
+    re.IGNORECASE,
+)
+NUMERIC_FACT_RE = re.compile(
+    r"(?:چند|چقدر|چه\s+درصد|چه\s+سهم|چند\s+درصد|how\s+many|how\s+much|what\s+percent)",
+    re.IGNORECASE,
+)
+ATTRIBUTED_FACT_RE = re.compile(r"\baccording\s+to\s+(?:this|the)\b", re.IGNORECASE)
 EXPLAIN_RE = re.compile(
     r"توضیح|تشریح|بیشتر بگو|دقیق(?:‌|\s)*تر|ساده|مثال|یاد بده|"
     r"explain|elaborate|teach|example",
@@ -79,8 +89,9 @@ EXTRACT_RE = re.compile(
 DETAIL_RE = re.compile(r"مفصل|جامع|کامل|دقیق|با جزئیات|detailed|thorough", re.IGNORECASE)
 PAGE_RE = re.compile(r"(?:صفحه|page)\s*([0-9۰-۹]+)", re.IGNORECASE)
 SECTION_RE = re.compile(
-    r"(?:چکیده|abstract|مقدمه|introduction|نتیجه(?:‌|\s)*(?:گیری)?|conclusions?|"
-    r"منابع|references|جدول|\btable\b|شکل|\bfigure\b|بخش(?:‌|\s)+[^؟?،,.]{1,80})",
+    r"(?:چکیده|abstract|مقدمه|introduction|نتیجه(?:‌|\s)*گیری|conclusions?|"
+    r"منابع|references|جدول|\btable\b|(?:طبق|در)\s+شکل(?:‌|\s)*[0-9۰-۹]+|"
+    r"\bfigure\s*[0-9]*\b|بخش(?:‌|\s)+[^؟?،,.]{1,80})",
     re.IGNORECASE,
 )
 SHORT_FOLLOWUP_RE = re.compile(
@@ -97,7 +108,13 @@ TABLE_RE = re.compile(
     re.IGNORECASE,
 )
 ANAPHORIC_FOLLOWUP_RE = re.compile(
-    r"^(?:این|آن|اون|همان|این\s+یکی|آن\s+یکی)\b.{0,100}[؟?!.]*$",
+    r"^(?:(?:این|آن|اون|همان|این\s+یکی|آن\s+یکی)\b|"
+    r"از\s+میان\s+(?:آن\s*ها|آن‌ها|اون\s*ها|اون‌ها)\b).{0,140}[؟?!.]*$",
+    re.IGNORECASE,
+)
+EVIDENCE_FOLLOWUP_RE = re.compile(
+    r"^(?:از\s+میان\s+(?:آن\s*ها|آن‌ها|اون\s*ها|اون‌ها)|"
+    r"(?:این|آن|اون|همان)\b.{0,60}(?:چند|چقدر|کدام|چه\s+زمان|چه\s+مقدار|چه\s+درصد))",
     re.IGNORECASE,
 )
 
@@ -117,10 +134,10 @@ def _target_section(text: str) -> str | None:
     for pattern, role in (
         (r"چکیده|abstract", "abstract"),
         (r"مقدمه|introduction", "introduction"),
-        (r"نتیجه(?:‌|\s)*(?:گیری)?|conclusions?", "conclusion"),
+        (r"نتیجه(?:‌|\s)*گیری|conclusions?", "conclusion"),
         (r"منابع|references", "references"),
         (r"جدول|table", "table"),
-        (r"شکل|figure", "figure"),
+        (r"(?:طبق|در)\s+شکل(?:‌|\s)*[0-9۰-۹]+|\bfigure\s*[0-9]*\b", "figure"),
     ):
         if re.search(pattern, lowered, re.IGNORECASE):
             return role
@@ -154,6 +171,15 @@ def plan_request(
         intent = route = "retry_previous"
         route_implementation = "conversation_only"
         reason, coverage, requires_map = "retry_previous_operation", "previous", False
+        history_required = True
+    elif (
+        EVIDENCE_FOLLOWUP_RE.match(text)
+        and has_history
+        and not QUOTED_RE.search(text)
+    ):
+        intent = route = "conversational_followup"
+        route_implementation = "history_aware_retrieval"
+        reason, coverage, requires_map = "history_reference_requires_new_evidence", "focused", False
         history_required = True
     elif (
         (SHORT_FOLLOWUP_RE.match(text) or ANAPHORIC_FOLLOWUP_RE.match(text))
@@ -197,6 +223,15 @@ def plan_request(
     elif SUMMARY_RE.search(text):
         intent, route = "focused_summary", "focused_rag"
         reason, coverage, requires_map = "focused_summary_requested", "focused", False
+    elif DEFINITION_RE.search(text):
+        intent, route = "exact_answer", "focused_rag"
+        reason, coverage, requires_map = "definition_fact_requested", "focused", False
+    elif NUMERIC_FACT_RE.search(text):
+        intent, route = "exact_answer", "focused_rag"
+        reason, coverage, requires_map = "numeric_fact_requested", "focused", False
+    elif ATTRIBUTED_FACT_RE.search(text):
+        intent, route = "exact_answer", "focused_rag"
+        reason, coverage, requires_map = "attributed_fact_requested", "focused", False
     elif COMPARE_RE.search(text):
         intent, route = "compare", "analytical"
         reason, coverage, requires_map = "comparison_requested", "multi_source", False

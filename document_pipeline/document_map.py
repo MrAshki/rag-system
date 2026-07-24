@@ -93,7 +93,7 @@ def _section_role(title: str, unit_type: str) -> str:
         r"ما.?رکت پدید.?وران|"
         r"funding|financial support|منابع مالی|حمایت مالی|"
         r"ethics?|ethical considerations?|ملاحظات اخلاقی|"
-        r"conflicts? of interests?|تعارض منافع|"
+        r"conflicts? of interests?|تعارض منافع|تارض منافع|تضاد منافع|"
         r"article info|اطلاعات مقاله|publisher|ناشر|journal|مجله)",
         normalized,
     ):

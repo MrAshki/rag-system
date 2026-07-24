@@ -1,7 +1,12 @@
 import unittest
 
 import rag
-from backend.app.retrieval.hybrid import lexical_rank, reciprocal_rank_fusion
+from backend.app.retrieval.hybrid import (
+    hybrid_search,
+    hybrid_search_stages,
+    lexical_rank,
+    reciprocal_rank_fusion,
+)
 from backend.app.vector.base import SearchResult
 
 
@@ -35,6 +40,39 @@ class HybridRetrievalTests(unittest.TestCase):
         diversified = rag.diversify_chunks(chunks, top_k=5)
 
         self.assertEqual([item["chunk"] for item in diversified], [1, 2, 3, 4, 5])
+
+    def test_stage_trace_returns_exact_dense_sparse_and_fused_rankings(self):
+        class Store:
+            def search(self, *_args, **_kwargs):
+                return [result("d1", 1, "dense shared"), result("d1", 2, "dense")]
+
+            def list_chunks(self, *_args, **_kwargs):
+                return [result("d1", 1, "rare shared"), result("d1", 3, "rare")]
+
+        store = Store()
+        stages = hybrid_search_stages(
+            store,
+            query="rare",
+            query_embedding=[0.1],
+            filters={"document_id": "d1"},
+            top_k=3,
+            lexical_scan_limit=50,
+        )
+        ordinary = hybrid_search(
+            store,
+            query="rare",
+            query_embedding=[0.1],
+            filters={"document_id": "d1"},
+            top_k=3,
+            lexical_scan_limit=50,
+        )
+        self.assertEqual([row.chunk for row in stages.dense], [1, 2])
+        self.assertEqual([row.chunk for row in stages.lexical], [3, 1])
+        self.assertEqual(
+            [row.chunk for row in stages.fused],
+            [row.chunk for row in ordinary],
+        )
+        self.assertGreater(stages.lexical[0].score, 0)
 
 
 if __name__ == "__main__":

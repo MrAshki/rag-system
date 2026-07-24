@@ -344,7 +344,10 @@ class QdrantStore(VectorStore):
             else:
                 payload = point.payload or {}
                 score = point.score
-            metadata = payload.get("metadata") or {}
+            metadata = {
+                **(payload.get("metadata") or {}),
+                "chunk_id": payload.get("chunk_id"),
+            }
             results.append(
                 SearchResult(
                     text=payload.get("text") or "",
@@ -363,7 +366,10 @@ class QdrantStore(VectorStore):
         results = []
         for point in points:
             payload = (point.get("payload") or {}) if isinstance(point, dict) else (point.payload or {})
-            metadata = payload.get("metadata") or {}
+            metadata = {
+                **(payload.get("metadata") or {}),
+                "chunk_id": payload.get("chunk_id"),
+            }
             results.append(
                 SearchResult(
                     text=payload.get("text") or "",

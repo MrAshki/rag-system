@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "description": "Goal 3 expanded representative subset selected from the unchanged Development Gold Set.",
+  "single_task_ids": [
+    "d1366-fact-screening",
+    "d145-fact-definition",
+    "d1454-fact-forms",
+    "d1483-fact-studies",
+    "d1499-fact-indicators",
+    "d16450-fact-west",
+    "d1366-num-referral",
+    "d145-num-model",
+    "d1483-num-domains",
+    "d16434-num-variance",
+    "d1483-summary",
+    "d16334-summary",
+    "d16434-analysis-mediator",
+    "d16456-analysis-coordination",
+    "d1366-cross-conclusion",
+    "d16334-cross",
+    "d16456-cross",
+    "d1375-noanswer-vaccine",
+    "fx001-conflict",
+    "fx002-noanswer-resolution",
+    "d14148-quote-explain",
+    "fx002-quote"
+  ],
+  "conversation_turns": [
+    {
+      "conversation_id": "conv-d145-explain",
+      "turn_id": "t1",
+      "base_task_id": "d145-fact-definition"
+    },
+    {
+      "conversation_id": "conv-d145-explain",
+      "turn_id": "t2",
+      "base_task_id": "d145-fact-definition",
+      "required_concepts": [
+        "کار",
+        "بیماری"
+      ]
+    },
+    {
+      "conversation_id": "conv-d1366-history-and-evidence",
+      "turn_id": "t1",
+      "base_task_id": "d1366-fact-screening"
+    },
+    {
+      "conversation_id": "conv-d1366-history-and-evidence",
+      "turn_id": "t2",
+      "base_task_id": "d1366-num-referral",
+      "required_concepts": [
+        "۳٫۶ درصد"
+      ]
+    }
+  ],
+  "coverage": {
+    "local_factual": 6,
+    "table_or_numerical": 4,
+    "summary_or_analytical": 4,
+    "cross_language": 3,
+    "no_answer_or_conflict": 3,
+    "conversation_turns": 4,
+    "quoted_document_explanation": 2
+  }
+}

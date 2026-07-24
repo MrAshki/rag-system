@@ -13,6 +13,10 @@ export function traceLabel(event: Extract<StreamEvent, { type: "trace" }>) {
   if (event.stage === "summary_document_review") return "در حال بررسی کل سند";
   if (event.stage === "summary_generation") return "در حال تهیه خلاصه جامع";
   if (event.stage === "summary_validation") return "در حال بررسی پوشش مطالب و منابع";
+  if (event.stage === "multi_document_review") return "در حال بررسی همه سندهای انتخاب‌شده";
+  if (event.stage === "multi_document_summary_generation") return "در حال تهیه خلاصه چندسندی";
+  if (event.stage === "multi_document_comparison_generation") return "در حال مقایسه سندها";
+  if (event.stage === "citation_validation") return "در حال بررسی شواهد و منابع";
   if (event.stage === "conversation_history_review") return "در حال بررسی پیام قبلی";
   if (event.stage === "conversation_explanation") return "در حال آماده‌سازی توضیح";
   if (event.stage === "table_inspection") return "در حال بررسی جدول‌ها و داده‌های سند";

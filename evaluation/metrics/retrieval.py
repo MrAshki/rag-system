@@ -48,7 +48,9 @@ def average_precision(retrieved: Sequence[Hashable], qrels: Mapping[Hashable, in
 
 def ndcg_at_k(retrieved: Sequence[Hashable], qrels: Mapping[Hashable, int | float], k: int) -> float:
     def gain(grade: float, rank: int) -> float:
-        return (2**grade - 1) / math.log2(rank + 1)
+        # TREC's ndcg_cut uses the judgment grade as the gain. Keeping the
+        # local implementation identical makes independent parity meaningful.
+        return grade / math.log2(rank + 1)
 
     actual = sum(gain(float(qrels.get(item, 0)), rank) for rank, item in enumerate(retrieved[:k], start=1))
     ideal_grades = sorted((float(value) for value in qrels.values() if value > 0), reverse=True)[:k]

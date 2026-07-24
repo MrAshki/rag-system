@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import statistics
@@ -17,6 +18,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import db  # noqa: E402
+from document_pipeline import ingest  # noqa: E402
 from evaluation.metrics.citations import evaluate_citations  # noqa: E402
 from evaluation.metrics.conversations import evaluate_conversations  # noqa: E402
 from evaluation.metrics.generation import aggregate_generation, score_generation  # noqa: E402
@@ -116,6 +118,35 @@ def _authenticated_user_id(session: requests.Session) -> int:
     if not user:
         raise RuntimeError("Could not resolve authenticated E2E user")
     return int(user["id"])
+
+
+def _source_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _asset_matches_source(asset_id: str, *, user_id: int, source: Path) -> bool:
+    """Verify an evaluation asset against owner, filename, size and raw bytes."""
+    asset = db.get_asset(asset_id)
+    if not asset:
+        return False
+    if int(asset["user_id"]) != int(user_id):
+        return False
+    if asset["original_filename"] != source.name or int(asset["size_bytes"] or 0) != source.stat().st_size:
+        return False
+    original_path = Path(str(asset["original_path"] or ""))
+    source_matches = (
+        original_path.is_file()
+        and _source_sha256(original_path) == _source_sha256(source)
+    )
+    if not source_matches:
+        return False
+    if asset["status"] == "scanned":
+        return str(asset["processing_version"] or "").startswith(f"{ingest.NORMALIZATION_VERSION}:")
+    return asset["status"] in {"uploaded", "scanning"}
 
 
 def _usage(state: dict) -> dict:
@@ -249,6 +280,7 @@ def prepare(run_dir: Path, storage_state: Path) -> None:
     if state["projected_cost_usd"] >= HARD_CAP_USD:
         raise RuntimeError("Projected cost exceeds hard cap")
     session = _session(storage_state)
+    user_id = _authenticated_user_id(session)
     assets = session.get(f"{BASE_URL}/api/gallery/assets", timeout=15).json().get("assets", [])
     by_filename = {}
     for item in assets:
@@ -256,9 +288,16 @@ def prepare(run_dir: Path, storage_state: Path) -> None:
     missing = []
     asset_ids = {}
     for filename in FILES:
-        size = (ROOT / "composite_goldset_pdfs" / filename).stat().st_size
+        source = ROOT / "composite_goldset_pdfs" / filename
+        size = source.stat().st_size
         match = next(
-            (row for row in by_filename.get(filename, []) if int(row.get("size_bytes") or 0) == size and row.get("status") in {"uploaded", "scanning", "scanned"}),
+            (
+                row
+                for row in by_filename.get(filename, [])
+                if int(row.get("size_bytes") or 0) == size
+                and row.get("status") in {"uploaded", "scanning", "scanned"}
+                and _asset_matches_source(str(row["id"]), user_id=user_id, source=source)
+            ),
             None,
         )
         if match:
@@ -281,6 +320,15 @@ def prepare(run_dir: Path, storage_state: Path) -> None:
             for handle in handles:
                 handle.close()
     state["asset_ids"] = asset_ids
+    state["user_id"] = user_id
+    state["asset_source_mapping"] = {
+        filename: {
+            "asset_id": asset_id,
+            "user_id": user_id,
+            "source_sha256": _source_sha256(ROOT / "composite_goldset_pdfs" / filename),
+        }
+        for filename, asset_id in asset_ids.items()
+    }
     state["prepared_at"] = datetime.now(timezone.utc).isoformat()
     _write_json(_state_path(run_dir), state)
     ledger = _usage(state)
@@ -362,7 +410,12 @@ def _score(case: dict, events: list[dict], latency_ms: float, asset_id: str) -> 
     citation_required = bool(case.get("citation_expectation", {}).get("required"))
     citation_valid = all(isinstance(item, str) and PAGE_RE.search(item) for item in sources) if sources else not citation_required
     citation_document_correct = all(expected_filename in item for item in sources) if sources else not citation_required
-    citation_page_correct = bool(expected_pages & set(cited_pages)) if citation_required else True
+    cited_page_set = set(cited_pages)
+    citation_page_correct = (
+        bool(cited_page_set)
+        and cited_page_set.issubset(expected_pages)
+        if citation_required else True
+    )
     retrieval = metadata.get("retrieval") or {}
     strategy = metadata.get("strategy")
     retrieval_called = bool(metadata.get("retrieved_chunks") or metadata.get("evidence_items"))
@@ -370,7 +423,14 @@ def _score(case: dict, events: list[dict], latency_ms: float, asset_id: str) -> 
         retrieval_called = False
     concept_threshold = 1.0
     concepts_covered = generation["required_concept_coverage"] >= concept_threshold
-    answer_correct = (generation["acceptable_answer_match"] or concepts_covered) and not generation["forbidden_claim"]
+    answer_correct = generation["acceptable_answer_match"] and not generation["forbidden_claim"]
+    minimum_citations = int(case.get("citation_expectation", {}).get("minimum_citations") or 1)
+    all_required_claims_cited = (
+        len(sources) >= minimum_citations
+        and citation_page_correct
+        if citation_required else True
+    )
+    telemetry = metadata.get("telemetry") or {}
     record = {
         "query_id": case["query_id"],
         "filename": expected_filename,
@@ -381,6 +441,10 @@ def _score(case: dict, events: list[dict], latency_ms: float, asset_id: str) -> 
         "actual_route": actual_route,
         "retrieval_policy": case["retrieval_policy"],
         "retrieval_called": retrieval_called,
+        "document_operations": {
+            key: int(telemetry.get(key) or 0)
+            for key in ("retrieval_calls", "embedding_calls", "rewrite_calls", "reranker_calls")
+        },
         "rewrite_expected": case.get("task_type") == "cross_language",
         "rewrite_correct": bool(retrieval.get("rewrite_used")) == (case.get("task_type") == "cross_language"),
         "reranker_expected": case["expected_route"] in {"focused_rag", "analytical"} and case["retrieval_policy"] == "required",
@@ -396,16 +460,26 @@ def _score(case: dict, events: list[dict], latency_ms: float, asset_id: str) -> 
         "citation_valid": citation_valid,
         "citation_document_correct": citation_document_correct,
         "citation_page_correct": citation_page_correct,
-        "all_required_claims_cited": bool(sources) if citation_required else True,
+        "all_required_claims_cited": all_required_claims_cited,
         "contains_numeric_claim": case.get("task_type") in {"table_or_numerical", "local_factual"},
         "unsupported_numeric_citation_failure": bool(case.get("task_type") in {"table_or_numerical", "local_factual"} and answer_correct and not sources),
         "metadata_only_citation_failure": bool(sources and not cited_pages),
         "route_correct": actual_route == case["expected_route"],
-        "evidence_available": bool(sources or metadata.get("retrieved_chunks") or metadata.get("evidence_items")),
+        "evidence_available": bool(
+            sources
+            or metadata.get("retrieved_chunks")
+            or metadata.get("evidence_items")
+            or metadata.get("history_resolved")
+        ),
         "answer_correct": bool(answer_correct),
         "required_concepts_covered": bool(concepts_covered),
         "grounded": bool((not citation_required or sources) and not generation["forbidden_claim"]),
-        "citations_correct": bool(citation_valid and citation_document_correct and citation_page_correct),
+        "citations_correct": bool(
+            citation_valid
+            and citation_document_correct
+            and citation_page_correct
+            and all_required_claims_cited
+        ),
         "output_complete": bool(answer.strip() and not generation["generic_failure"] and not generation["truncation"]),
         "no_internal_message_exposed": not bool(INTERNAL_MESSAGE_RE.search(answer)),
     }
@@ -497,13 +571,14 @@ def run(run_dir: Path, storage_state: Path) -> None:
         raise RuntimeError("Prepared asset set is incomplete")
     for filename, asset_id in state["asset_ids"].items():
         asset = db.get_asset(asset_id)
-        allowed_fixture_failure = (
-            filename == "fixture-004-intentional-no-answer.pdf"
-            and asset
-            and asset["status"] == "failed"
-            and "کیفیت متن استخراج‌شده" in str(asset["scan_error"] or "")
-        )
-        if not asset or (asset["status"] != "scanned" and not allowed_fixture_failure):
+        mapping = (state.get("asset_source_mapping") or {}).get(filename) or {}
+        source = ROOT / "composite_goldset_pdfs" / filename
+        if (
+            not asset
+            or asset["status"] != "scanned"
+            or not _asset_matches_source(asset_id, user_id=int(state["user_id"]), source=source)
+            or mapping.get("source_sha256") != _source_sha256(source)
+        ):
             raise RuntimeError(f"Asset not ready: {filename}")
     initial_usage = _usage(state)
     if initial_usage["cost_usd"] >= HARD_CAP_USD:

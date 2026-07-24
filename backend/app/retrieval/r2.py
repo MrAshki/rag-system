@@ -160,6 +160,7 @@ def retrieve_r2(
     rewrite_provider: ChatProvider | None,
     candidate_k: int,
     cross_language_rewrite_enabled: bool = True,
+    stage_recorder: Callable[[str, list[dict[str, Any]]], None] | None = None,
 ) -> R2Result:
     rewrite = rewrite_query(
         query,
@@ -177,9 +178,16 @@ def retrieve_r2(
         fuse_candidate_lists(rankings, top_k=candidate_k)
         if len(rankings) > 1 else original_candidates
     )
+    if stage_recorder:
+        stage_recorder("production_fused_pre_rerank", candidates)
     reranked = rerank(rerank_query, candidates)
+    if stage_recorder:
+        stage_recorder("production_reranked", reranked)
+    final_chunks = finalize(reranked)
+    if stage_recorder:
+        stage_recorder("production_r2_final", final_chunks)
     return R2Result(
-        chunks=finalize(reranked),
+        chunks=final_chunks,
         rewrite=rewrite,
         search_count=len(rankings),
         reranker_count=1 if candidates else 0,
