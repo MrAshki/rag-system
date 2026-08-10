@@ -1,4 +1,4 @@
-# Dastyar Asnad
+# Document Assistant 
 
 <p align="center">
   <img src="docs/assets/rag-system-hero.png" alt="Dastyar Asnad — an intelligent document RAG workspace" width="100%" />
