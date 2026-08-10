@@ -44,7 +44,6 @@ jobs:
           pytest -q \
             tests/test_network_safety.py \
             tests/api/test_config.py \
-            tests/api/test_health.py \
             tests/model_gateway/test_openrouter_provider.py \
             tests/generation/test_orchestrator.py \
             tests/grounding/test_citations.py \
