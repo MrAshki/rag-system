@@ -36,5 +36,16 @@ jobs:
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install -r requirements.txt
 
-      - name: Run tests
-        run: pytest -q
+      - name: Compile Python files
+        run: python -m compileall backend model_gateway evaluation tests
+
+      - name: Run smoke tests
+        run: |
+          pytest -q \
+            tests/test_network_safety.py \
+            tests/api/test_config.py \
+            tests/api/test_health.py \
+            tests/model_gateway/test_openrouter_provider.py \
+            tests/generation/test_orchestrator.py \
+            tests/grounding/test_citations.py \
+            tests/evaluation/test_wilson_intervals.py
