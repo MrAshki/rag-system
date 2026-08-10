@@ -13,6 +13,7 @@ jobs:
     env:
       PYTHONUNBUFFERED: "1"
       SESSION_SECRET_KEY: "ci-only-session-secret-key-with-enough-length"
+      OPENROUTER_API_KEY: "ci-dummy-openrouter-key"
 
     steps:
       - name: Checkout
